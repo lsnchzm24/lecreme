@@ -1,18 +1,31 @@
 """Payments: Stripe Checkout with Stripe Connect, so every sale splits automatically.
 
-How the money moves
-    The customer pays the menu price on Stripe's page (cards, Apple Pay, Google Pay).
-    The charge is a destination charge to the bakery's connected Stripe account, with an
-    application fee of PLATFORM_FEE_PCT (default 5%) that Stripe routes to the platform account
-    (the account that owns STRIPE_SECRET_KEY). The customer only ever sees the cake total;
-    the bakery's admin shows the fee on every sale in the Payments tab.
+Who is who
+    Platform account   Yours. Its secret key is STRIPE_SECRET_KEY on Railway. It runs the checkout
+                       and receives the platform fee.
+    Bakery account     A Stripe Express account the bakery creates from Admin > Payments >
+                       "Connect payouts with Stripe". The bakery never handles API keys.
 
-    Deposits and balances are separate charges, each with its own 5% fee. Payments the bakery
-    takes in person (cash, card at the counter) are recorded in the admin with the 5% marked as
-    owed rather than collected, so the report covers all sales.
+How each payment splits (destination charge with on_behalf_of)
+    The bakery is the merchant of record: Stripe Checkout shows the bakery's name and branding,
+    and the customer's card statement shows the bakery's statement descriptor.
 
+        platform fee  =  PLATFORM_FEE_PCT (5%) of the payment  +  Stripe's real processing fee
+        bakery gets   =  payment  -  platform fee
+
+    Stripe charges its processing fee to the platform, so the fee passed through here makes the
+    platform whole and leaves exactly 5% with the platform.
+
+    Stripe's real fee is only known after the charge (international cards, for example, cost
+    more), so checkout starts with an estimate (STRIPE_PCT + STRIPE_FIXED_CENTS, the standard
+    US card rate) and settle() corrects it to the exact fee right after payment:
+        estimate too high  ->  the difference goes back to the bakery (application fee refund)
+        estimate too low   ->  the difference comes back from the bakery (transfer reversal)
+
+    Deposits and balances are separate charges, each split the same way. Payments taken in person
+    have no Stripe fee; 5% is recorded as owed to the platform so the report covers every sale.
     Until the bakery finishes Stripe onboarding, charges land in the platform account and the
-    report shows the 95% as owed to the bakery.
+    report shows what is owed to the bakery.
 
 Environment variables
     STRIPE_SECRET_KEY        sk_live_... / sk_test_...   (the platform account: yours)
@@ -21,12 +34,16 @@ Environment variables
                                      checkout.session.async_payment_succeeded,
                                      checkout.session.expired
     PLATFORM_FEE_PCT         default 5
+    STRIPE_PCT               default 2.9   (only for the first estimate)
+    STRIPE_FIXED_CENTS       default 30    (only for the first estimate)
     STRIPE_CONNECT_ACCOUNT   optional acct_... to use an existing connected account
 """
 import hashlib
 import hmac
+import logging
 import os
 import time
+from pathlib import Path
 
 import requests
 
@@ -35,8 +52,11 @@ import schedule
 import store
 from i18n import _
 
+log = logging.getLogger("payments")
 API = "https://api.stripe.com/v1"
 BUSINESS = os.environ.get("BUSINESS_NAME", "LeCreme Bakery")
+DESCRIPTOR = os.environ.get("STATEMENT_DESCRIPTOR", "LECREME BAKERY")[:22]
+ICON = Path(__file__).resolve().parent / "static" / "img" / "icon.png"
 
 
 def enabled():
@@ -51,15 +71,29 @@ def test_mode():
     return _key().startswith("sk_test_")
 
 
-def fee_pct():
+def _num(name, default, lo, hi):
     try:
-        return min(max(float(os.environ.get("PLATFORM_FEE_PCT", "5")), 0.0), 30.0)
+        return min(max(float(os.environ.get(name, default)), lo), hi)
     except ValueError:
-        return 5.0
+        return float(default)
 
 
-def fee_for(cents):
+def fee_pct():
+    return _num("PLATFORM_FEE_PCT", 5, 0, 30)
+
+
+def platform_cut(cents):
+    """The platform's own share: 5% of the payment."""
     return int(round(cents * fee_pct() / 100))
+
+
+def stripe_fee_estimate(cents):
+    return int(round(cents * _num("STRIPE_PCT", 2.9, 0, 10) / 100)) + int(_num("STRIPE_FIXED_CENTS", 30, 0, 500))
+
+
+def application_fee(cents):
+    """What checkout asks Stripe to route to the platform: 5% + estimated Stripe fee."""
+    return min(platform_cut(cents) + stripe_fee_estimate(cents), cents)
 
 
 def connect_account():
@@ -70,9 +104,13 @@ def connect_ready():
     return bool(connect_account()) and store.setting("connect_ready") == "1"
 
 
-def _stripe(method, path, data=None):
+def _stripe(method, path, data=None, idem=None, files=None, base=API):
+    headers = {"Idempotency-Key": idem} if idem else {}
     try:
-        r = requests.request(method, API + path, data=data, auth=(_key(), ""), timeout=20)
+        if method == "GET":
+            r = requests.get(base + path, params=data, auth=(_key(), ""), timeout=20)
+        else:
+            r = requests.request(method, base + path, data=data, files=files, headers=headers, auth=(_key(), ""), timeout=30)
         body = r.json()
     except Exception as e:  # network or bad JSON
         return None, f"Couldn't reach Stripe ({e.__class__.__name__})."
@@ -107,10 +145,7 @@ def create_checkout(order, kind, base_url):
     """Start a Checkout session for the deposit or the balance. Returns (url, error)."""
     if not enabled():
         return None, _("Online payment isn't switched on yet. Please call us to finish your order.")
-    if kind == "deposit":
-        amount = order["deposit_cents"]
-    else:
-        amount = balance_due(order)
+    amount = order["deposit_cents"] if kind == "deposit" else balance_due(order)
     if amount < 50:
         return None, _("There's nothing left to pay on this order.")
     lang = order.get("lang") or "en"
@@ -119,7 +154,6 @@ def create_checkout(order, kind, base_url):
     item = _("{shop}: {cake}, pickup {when}", lang, shop=BUSINESS, cake=head, when=when)
     item += " " + (_("(deposit)", lang) if kind == "deposit" else _("(balance)", lang))
     track = f"{base_url}/order/{order['token']}"
-    fee = fee_for(amount)
     data = {
         "mode": "payment",
         "success_url": f"{track}?paid={kind}",
@@ -142,30 +176,37 @@ def create_checkout(order, kind, base_url):
         data["customer_email"] = order["email"]
     acct = connect_account()
     destination = ""
+    fee = 0
     if acct and connect_ready():
         destination = acct
+        fee = application_fee(amount)
         data["payment_intent_data[application_fee_amount]"] = str(fee)
         data["payment_intent_data[transfer_data][destination]"] = acct
-        data["payment_intent_data[on_behalf_of]"] = acct
+        data["payment_intent_data[on_behalf_of]"] = acct        # bakery is the merchant: their name on Checkout and statements
     body, err = _stripe("POST", "/checkout/sessions", data)
     if err or not body.get("url"):
+        log.warning("checkout session failed: %s", err)
         return None, _("We couldn't open the payment page. Please try again in a moment.")
     conn = store.db()
     try:
         with conn:
-            conn.execute("INSERT INTO payments (order_id, kind, amount_cents, fee_cents, method, status, session_id, destination, created_at) "
-                         "VALUES (?,?,?,?,?,?,?,?,?)",
-                         (order["id"], kind, amount, fee, "card", "pending", body["id"], destination, store.now_iso()))
+            conn.execute("INSERT INTO payments (order_id, kind, amount_cents, fee_cents, platform_cents, stripe_fee_cents, method, status, "
+                         "session_id, destination, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                         (order["id"], kind, amount, fee, platform_cut(amount), stripe_fee_estimate(amount), "card", "pending",
+                          body["id"], destination, store.now_iso()))
     finally:
         conn.close()
     return body["url"], ""
 
 
 def _apply_session(s):
-    """Record a paid session once. Returns (order_id, kind) if newly recorded."""
+    """Record a paid session once, then settle its fees. Returns (order_id, kind) if newly recorded."""
     if s.get("payment_status") != "paid":
         return None
     sid = s.get("id", "")
+    pi = s.get("payment_intent") or ""
+    if isinstance(pi, dict):
+        pi = pi.get("id", "")
     conn = store.db()
     try:
         with conn:
@@ -177,8 +218,9 @@ def _apply_session(s):
                 store.add_event(row["order_id"], "note", f"Stripe session {sid} paid ${paid / 100:,.2f}, expected "
                                 f"${row['amount_cents'] / 100:,.2f}. Check Stripe.", public=False, conn=conn)
                 return None
-            conn.execute("UPDATE payments SET status = 'paid', paid_at = ? WHERE id = ?", (store.now_iso(), row["id"]))
-            # A paid deposit any newer than an older pending checkout supersedes it.
+            conn.execute("UPDATE payments SET status = 'paid', paid_at = ?, payment_intent = ? WHERE id = ?",
+                         (store.now_iso(), pi, row["id"]))
+            # A paid checkout supersedes any older pending one of the same kind.
             conn.execute("UPDATE payments SET status = 'void' WHERE order_id = ? AND kind = ? AND status = 'pending'",
                          (row["order_id"], row["kind"]))
             order = conn.execute("SELECT status FROM orders WHERE id = ?", (row["order_id"],)).fetchone()
@@ -192,9 +234,87 @@ def _apply_session(s):
                                 f"Deposit of ${paid / 100:,.2f} received. Your date is locked in.", conn=conn)
             else:
                 store.add_event(row["order_id"], "payment", f"Balance of ${paid / 100:,.2f} received. You're all paid up.", conn=conn)
-            return row["order_id"], row["kind"]
+            result = (row["order_id"], row["kind"])
+            pid = row["id"]
     finally:
         conn.close()
+    settle(pid)
+    return result
+
+
+# ------------------------------------------------------------- exact fee split
+def settle(payment_id):
+    """Correct the platform fee to exactly 5% + Stripe's real fee for one paid payment.
+
+    Safe to call more than once: each payment is claimed before any money moves, and refunds and
+    reversals carry an idempotency key, so a retry can never move money twice."""
+    if not enabled():
+        return False
+    conn = store.db()
+    try:
+        with conn:
+            claimed = conn.execute("UPDATE payments SET settled = 2 WHERE id = ? AND settled = 0 AND status = 'paid' "
+                                   "AND payment_intent != ''", (payment_id,)).rowcount
+            row = conn.execute("SELECT * FROM payments WHERE id = ?", (payment_id,)).fetchone()
+    finally:
+        conn.close()
+    if not claimed:
+        return False
+
+    def release(note=""):
+        c = store.db()
+        try:
+            with c:
+                c.execute("UPDATE payments SET settled = 0 WHERE id = ?", (payment_id,))
+                if note:
+                    store.add_event(row["order_id"], "note", note, public=False, conn=c)
+        finally:
+            c.close()
+        return False
+
+    pi, err = _stripe("GET", f"/payment_intents/{row['payment_intent']}", {"expand[]": "latest_charge.balance_transaction"})
+    charge = (pi or {}).get("latest_charge")
+    bt = charge.get("balance_transaction") if isinstance(charge, dict) else None
+    if not isinstance(bt, dict):
+        return release()                                  # Stripe hasn't posted the fee yet; try again later
+    real_fee = sum(f.get("amount", 0) for f in bt.get("fee_details") or [] if f.get("type") == "stripe_fee") or int(bt.get("fee") or 0)
+    platform = row["platform_cents"]
+    target = min(platform + real_fee, row["amount_cents"])
+    if row["destination"]:
+        charged = int(charge.get("application_fee_amount") or 0)
+        diff = charged - target
+        if diff > 0 and charge.get("application_fee"):
+            _r, err = _stripe("POST", f"/application_fees/{charge['application_fee']}/refunds", {"amount": str(diff)},
+                              idem=f"lecreme-settle-{payment_id}")
+        elif diff < 0 and charge.get("transfer"):
+            _r, err = _stripe("POST", f"/transfers/{charge['transfer']}/reversals", {"amount": str(-diff)},
+                              idem=f"lecreme-settle-{payment_id}")
+        else:
+            err = ""
+        if err:
+            return release(f"Fee correction for payment {payment_id} didn't go through yet: {err}")
+    conn = store.db()
+    try:
+        with conn:
+            conn.execute("UPDATE payments SET stripe_fee_cents = ?, fee_cents = ?, settled = 1 WHERE id = ?",
+                         (real_fee, target, payment_id))
+    finally:
+        conn.close()
+    return True
+
+
+def settle_pending(limit=20):
+    """Retry any paid online payments whose exact fee couldn't be read yet."""
+    if not enabled():
+        return
+    conn = store.db()
+    try:
+        ids = [r[0] for r in conn.execute("SELECT id FROM payments WHERE status = 'paid' AND settled = 0 AND payment_intent != '' "
+                                          "ORDER BY id DESC LIMIT ?", (limit,))]
+    finally:
+        conn.close()
+    for pid in ids:
+        settle(pid)
 
 
 def confirm_pending(order):
@@ -253,13 +373,14 @@ def handle_event(event):
 
 # ----------------------------------------------------------- in-person payments
 def record_in_person(order, amount_cents, method):
-    """The bakery took money at the counter. 5% is noted as owed to the platform."""
+    """The bakery took money at the counter: no Stripe fee, 5% recorded as owed to the platform."""
     conn = store.db()
     try:
         with conn:
-            conn.execute("INSERT INTO payments (order_id, kind, amount_cents, fee_cents, method, status, created_at, paid_at) "
-                         "VALUES (?,?,?,?,?,?,?,?)",
-                         (order["id"], "in_person", amount_cents, fee_for(amount_cents), method, "paid", store.now_iso(), store.now_iso()))
+            cut = platform_cut(amount_cents)
+            conn.execute("INSERT INTO payments (order_id, kind, amount_cents, fee_cents, platform_cents, stripe_fee_cents, method, status, "
+                         "created_at, paid_at, settled) VALUES (?,?,?,?,?,?,?,?,?,?,1)",
+                         (order["id"], "in_person", amount_cents, cut, cut, 0, method, "paid", store.now_iso(), store.now_iso()))
             if order["status"] in ("pending", "expired"):
                 conn.execute("UPDATE orders SET status = 'confirmed', hold_until = '' WHERE id = ?", (order["id"],))
             store.add_event(order["id"], "payment", f"${amount_cents / 100:,.2f} paid in person. Thank you!", conn=conn)
@@ -269,7 +390,8 @@ def record_in_person(order, amount_cents, method):
 
 # --------------------------------------------------------------------- report
 def report(month=None):
-    """Every paid payment with its fee split, newest first, plus totals."""
+    """Every paid payment with its split, newest first, plus totals."""
+    settle_pending()
     conn = store.db()
     try:
         q = ("SELECT p.*, o.name, o.token, o.pickup_date FROM payments p JOIN orders o ON o.id = p.order_id "
@@ -283,22 +405,23 @@ def report(month=None):
             "SELECT DISTINCT substr(paid_at, 1, 7) FROM payments WHERE status = 'paid' ORDER BY 1 DESC")]
     finally:
         conn.close()
-    t = {"gross": 0, "fee": 0, "fee_collected": 0, "fee_owed": 0, "net": 0, "owed_to_bakery": 0}
+    t = {"gross": 0, "stripe": 0, "platform": 0, "net": 0, "platform_owed": 0, "owed_to_bakery": 0, "estimated": 0}
     for r in rows:
+        r["estimated"] = r["kind"] != "in_person" and r["settled"] != 1
+        r["net_cents"] = r["amount_cents"] - r["stripe_fee_cents"] - r["platform_cents"]
         if r["kind"] == "in_person":
             r["route"] = _("In person")
-            t["fee_owed"] += r["fee_cents"]
+            t["platform_owed"] += r["platform_cents"]
         elif r["destination"]:
             r["route"] = _("Stripe, split automatically")
-            t["fee_collected"] += r["fee_cents"]
         else:
             r["route"] = _("Stripe, before payouts were connected")
-            t["fee_collected"] += r["fee_cents"]
-            t["owed_to_bakery"] += r["amount_cents"] - r["fee_cents"]
-        r["net_cents"] = r["amount_cents"] - r["fee_cents"]
+            t["owed_to_bakery"] += r["net_cents"]
         t["gross"] += r["amount_cents"]
-        t["fee"] += r["fee_cents"]
+        t["stripe"] += r["stripe_fee_cents"]
+        t["platform"] += r["platform_cents"]
         t["net"] += r["net_cents"]
+        t["estimated"] += 1 if r["estimated"] else 0
     return {"rows": rows, "totals": t, "months": months, "pct": fee_pct()}
 
 
@@ -316,11 +439,15 @@ def start_onboarding(base_url):
             "business_profile[name]": BUSINESS,
             "business_profile[mcc]": "5462",          # bakeries
             "business_profile[url]": base_url,
+            "settings[payments][statement_descriptor]": DESCRIPTOR,
+            "settings[branding][primary_color]": "#5E0F25",
+            "settings[branding][secondary_color]": "#C9A24A",
         })
         if err:
             return None, err
         acct = body["id"]
         store.set_setting("connect_account", acct)
+        brand_account(acct)
     body, err = _stripe("POST", "/account_links", {
         "account": acct, "type": "account_onboarding",
         "refresh_url": f"{base_url}/admin/stripe/connect",
@@ -329,6 +456,25 @@ def start_onboarding(base_url):
     if err:
         return None, err
     return body["url"], ""
+
+
+def brand_account(acct):
+    """Put the bakery's logo and colors on its Stripe account, so Checkout and receipts look like the bakery."""
+    if store.setting("connect_branded") == acct or not ICON.exists():
+        return
+    with open(ICON, "rb") as fh:
+        f, err = _stripe("POST", "/files", {"purpose": "business_icon"}, files={"file": ("icon.png", fh, "image/png")},
+                         base="https://files.stripe.com/v1")
+    if err:
+        log.warning("icon upload failed: %s", err)
+        return
+    _b, err = _stripe("POST", f"/accounts/{acct}", {"settings[branding][icon]": f["id"],
+                                                     "settings[branding][primary_color]": "#5E0F25",
+                                                     "settings[branding][secondary_color]": "#C9A24A"})
+    if not err:
+        store.set_setting("connect_branded", acct)
+    else:
+        log.warning("branding failed: %s", err)
 
 
 def refresh_connect():
@@ -344,6 +490,7 @@ def refresh_connect():
     st.update(charges=bool(body.get("charges_enabled")), payouts=bool(body.get("payouts_enabled")),
               details=bool(body.get("details_submitted")))
     store.set_setting("connect_ready", "1" if st["charges"] else "0")
+    brand_account(acct)
     return st
 
 

@@ -18,13 +18,21 @@ kitchen's real availability, and reserve with a deposit. The bakery runs everyth
 
 ## Payments and the platform fee
 
-Stripe Connect destination charges. Every online charge carries an application fee of
-`PLATFORM_FEE_PCT` (default 5%) that Stripe routes to the platform account; the rest goes to the
-bakery's connected account. Customers only ever see the cake price. The bakery's Payments tab shows the
-fee on every sale; in-person payments are listed with the 5% marked as owed.
+Stripe Connect destination charges with `on_behalf_of`: the bakery is the merchant of record, so
+Stripe Checkout shows the bakery's name and branding and the customer's card statement shows
+"LECREME BAKERY". The platform account (yours, `STRIPE_SECRET_KEY`) runs the checkout.
+
+Every online payment splits exactly:
+
+    platform fee = 5% of the payment + Stripe's real processing fee
+    bakery gets  = payment - platform fee
+
+Checkout starts with an estimate of Stripe's fee (2.9% + 30¢); right after payment the site reads
+Stripe's actual fee and corrects the difference (application fee refund or transfer reversal), so the
+platform always nets exactly 5%. In-person payments have no Stripe fee; 5% is recorded as owed.
 
 The bakery connects payouts from **Admin → Payments → Connect payouts with Stripe** (Stripe Express
-onboarding). Enable Connect in your Stripe dashboard first.
+onboarding, no API keys). Enable Connect in your Stripe dashboard first.
 
 ## Railway variables
 
@@ -36,6 +44,7 @@ onboarding). Enable Connect in your Stripe dashboard first.
 | `STRIPE_SECRET_KEY` | Platform account key (`sk_test_` to try) |
 | `STRIPE_WEBHOOK_SECRET` | From the webhook at `https://DOMAIN/stripe/webhook` for `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.expired` |
 | `PLATFORM_FEE_PCT` | Default `5` |
+| `STRIPE_PCT`, `STRIPE_FIXED_CENTS` | First estimate of Stripe's fee, default `2.9` and `30` (corrected to the real fee after payment) |
 | `PUBLIC_URL` | e.g. `https://lecremebakery.com` (optional) |
 | `BAKERY_PHONE`, `BAKERY_TZ` | Default `786-484-6746`, `America/New_York` |
 | `ORDERS_INBOX`, `RESEND_API_KEY`, `RESEND_FROM` | Order emails (optional) |

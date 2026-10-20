@@ -546,4 +546,12 @@ ES = {
     "Street, city": "Calle, ciudad",
     "Pickup instructions": "Instrucciones de entrega",
     "Settings saved.": "Ajustes guardados.",
+    "How each online payment splits: the platform receives {pct}% of the payment plus Stripe's exact card fee, so Stripe's fee never comes out of the {pct}%. The bakery receives everything else, straight to its own Stripe account. Customers only see the cake price and the bakery's name.":
+        "Así se divide cada pago en línea: la plataforma recibe el {pct}% del pago más la comisión exacta de Stripe por la tarjeta, así que la comisión de Stripe nunca sale del {pct}%. La pastelería recibe todo lo demás, directo a su propia cuenta de Stripe. Los clientes solo ven el precio del pastel y el nombre de la pastelería.",
+    "Payouts connected. Every online payment splits automatically.": "Depósitos conectados. Cada pago en línea se divide automáticamente.",
+    "Estimated until Stripe posts the exact fee": "Estimado hasta que Stripe publique la comisión exacta",
+    "* Estimated until Stripe posts the exact fee, usually within a minute.": "* Estimado hasta que Stripe publique la comisión exacta, normalmente en menos de un minuto.",
+    "Stripe card fees": "Comisiones de tarjeta de Stripe",
+    "Stripe fee": "Comisión de Stripe",
+    "Platform ({pct}%)": "Plataforma ({pct}%)",
 }

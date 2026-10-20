@@ -186,27 +186,31 @@
       sel.value = cur; sel.dataset.n = j.months.length;
     }
     const t = j.totals, c = j.connect;
+    const how = `<p class="muted split-how">${_t("How each online payment splits: the platform receives {pct}% of the payment plus Stripe's exact card fee, so Stripe's fee never comes out of the {pct}%. The bakery receives everything else, straight to its own Stripe account. Customers only see the cake price and the bakery's name.", { pct: j.pct })}</p>`;
     const connect = !j.stripe_on ? `<p>${_t("Add STRIPE_SECRET_KEY on Railway to take payments online.")}</p>`
-      : c.charges ? `<p class="ok">${_t("Payouts connected. Every online sale splits automatically: {bakery}% to the bakery's Stripe account, {fee}% platform fee.", { bakery: 100 - j.pct, fee: j.pct })}</p>
+      : c.charges ? `<p class="ok">${_t("Payouts connected. Every online payment splits automatically.")}</p>${how}
           <a class="btn btn-quiet btn-sm" href="/admin/stripe/dashboard" target="_blank" rel="noopener">${_t("Open bakery Stripe dashboard")}</a>`
-      : `<p>${c.account ? _t("Stripe needs a few more details before payouts can start.") : _t("Connect the bakery's bank account through Stripe so each sale pays out automatically.")}${c.error ? ` <span class="muted">(${esc(c.error)})</span>` : ""}</p>
+      : `<p>${c.account ? _t("Stripe needs a few more details before payouts can start.") : _t("Connect the bakery's bank account through Stripe so each sale pays out automatically.")}${c.error ? ` <span class="muted">(${esc(c.error)})</span>` : ""}</p>${how}
           <a class="btn btn-gilt btn-sm" href="/admin/stripe/connect">${c.account ? _t("Finish Stripe setup") : _t("Connect payouts with Stripe")}</a>`;
     const kind = r => r.kind === "deposit" ? _t("Deposit") : r.kind === "balance" ? _t("Balance") : _t("In person ({method})", { method: _t(r.method) });
+    const est = r => r.estimated ? ` <span class="muted" title="${esc(_t("Estimated until Stripe posts the exact fee"))}">*</span>` : "";
     $("#pay").innerHTML = `
       <div class="o-card connect">${connect}</div>
-      <div class="tiles">
+      <div class="tiles tiles-4">
         <div class="tile"><span>${_t("Sales")}</span><b>${money(t.gross)}</b></div>
-        <div class="tile"><span>${_t("Platform fee ({pct}%)", { pct: j.pct })}</span><b>${money(t.fee)}</b></div>
+        <div class="tile"><span>${_t("Stripe card fees")}</span><b>${money(t.stripe)}</b></div>
+        <div class="tile"><span>${_t("Platform fee ({pct}%)", { pct: j.pct })}</span><b>${money(t.platform)}</b></div>
         <div class="tile tile-main"><span>${_t("Bakery earnings")}</span><b>${money(t.net)}</b></div>
       </div>
-      ${t.fee_owed ? `<p class="note">${_t("Platform fee on in-person payments, not yet settled:")} <b>${money(t.fee_owed)}</b></p>` : ""}
+      ${t.platform_owed ? `<p class="note">${_t("Platform fee on in-person payments, not yet settled:")} <b>${money(t.platform_owed)}</b></p>` : ""}
       ${t.owed_to_bakery ? `<p class="note">${_t("Online sales taken before payouts were connected, owed to the bakery:")} <b>${money(t.owed_to_bakery)}</b></p>` : ""}
-      <div class="o-card"><table class="pt"><thead><tr><th>${_t("Date")}</th><th>${_t("Order")}</th><th>${_t("Type")}</th><th>${_t("Sale")}</th><th>${_t("Fee")}</th><th>${_t("Bakery")}</th><th>${_t("How")}</th></tr></thead><tbody>
+      ${t.estimated ? `<p class="note">${_t("* Estimated until Stripe posts the exact fee, usually within a minute.")}</p>` : ""}
+      <div class="o-card"><table class="pt"><thead><tr><th>${_t("Date")}</th><th>${_t("Order")}</th><th>${_t("Type")}</th><th>${_t("Sale")}</th><th>${_t("Stripe fee")}</th><th>${_t("Platform ({pct}%)", { pct: j.pct })}</th><th>${_t("Bakery")}</th><th>${_t("How")}</th></tr></thead><tbody>
       ${j.rows.length ? j.rows.map(r => `<tr><td>${new Date(r.paid_at).toLocaleDateString(LOC, { month: "short", day: "numeric" })}</td>
         <td><a href="/order/${esc(r.token)}" target="_blank" rel="noopener">#${r.order_id} ${esc(r.name)}</a></td>
         <td>${esc(kind(r))}</td>
-        <td>${money(r.amount_cents)}</td><td>${money(r.fee_cents)}</td><td><b>${money(r.net_cents)}</b></td><td class="muted">${esc(r.route)}</td></tr>`).join("")
-        : `<tr><td colspan="7" class="muted">${_t("No payments yet.")}</td></tr>`}
+        <td>${money(r.amount_cents)}</td><td>${money(r.stripe_fee_cents)}${est(r)}</td><td>${money(r.platform_cents)}</td><td><b>${money(r.net_cents)}</b>${est(r)}</td><td class="muted">${esc(r.route)}</td></tr>`).join("")
+        : `<tr><td colspan="8" class="muted">${_t("No payments yet.")}</td></tr>`}
       </tbody></table></div>`;
   }
   $("#pay-month").addEventListener("change", loadPay);

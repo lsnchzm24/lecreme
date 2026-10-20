@@ -115,6 +115,11 @@ def db():
         conn.execute("PRAGMA journal_mode=WAL")
         if "lang" not in {r["name"] for r in conn.execute("PRAGMA table_info(orders)")}:
             conn.execute("ALTER TABLE orders ADD COLUMN lang TEXT NOT NULL DEFAULT 'en'")
+        pcols = {r["name"] for r in conn.execute("PRAGMA table_info(payments)")}
+        for col, ddl in (("platform_cents", "INTEGER NOT NULL DEFAULT 0"), ("stripe_fee_cents", "INTEGER NOT NULL DEFAULT 0"),
+                         ("payment_intent", "TEXT NOT NULL DEFAULT ''"), ("settled", "INTEGER NOT NULL DEFAULT 0")):
+            if col not in pcols:
+                conn.execute(f"ALTER TABLE payments ADD COLUMN {col} {ddl}")
         for k, v in DEFAULTS.items():
             conn.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (k, v))
         conn.commit()

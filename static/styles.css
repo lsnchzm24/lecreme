@@ -510,6 +510,9 @@ p { margin: 0; }
 .tile-main { background: var(--wine); color: var(--sugar); border-color: var(--wine); }
 .tile-main span { color: rgba(255, 246, 247, .75); }
 .tile-main b { color: var(--sugar); }
+.tiles-4 { grid-template-columns: repeat(4, 1fr); }
+.split-how { margin: .2rem 0 .8rem; max-width: 70ch; font-size: .92rem; }
+@media (max-width: 900px) { .tiles-4 { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 640px) { .tiles { grid-template-columns: 1fr; } }
 .note { background: #FFF8E6; border-radius: 12px; padding: .6rem .9rem; margin-bottom: .6rem; font-size: .93rem; }
 .connect .ok { color: var(--ok); font-weight: 600; margin-bottom: .6rem; }
