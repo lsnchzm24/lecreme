@@ -88,9 +88,9 @@ p { margin: 0; }
   background: radial-gradient(55% 60% at 72% 58%, #8a2443 0%, rgba(122, 26, 53, .4) 45%, transparent 75%), var(--wine); }
 .hero::after { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .5;
   background-image: radial-gradient(rgba(255, 246, 247, .05) 1px, transparent 1.2px); background-size: 6px 6px; }
-.hero-copy { position: relative; z-index: 1; max-width: 34rem; }
+.hero-copy { position: relative; z-index: 1; max-width: 40rem; }
 .hero h1 { font-family: var(--display); font-weight: 800; font-stretch: 76%; letter-spacing: -.022em; word-spacing: .04em; font-size: clamp(3.4rem, 8.6vw, 7.6rem); line-height: .86; }
-.hero h1 span { display: block; }
+.hero h1 span { display: block; white-space: nowrap; }
 .hero h1 span:nth-child(2) { padding-left: .5em; }
 .hero h1 span:nth-child(3) { padding-left: 1em; }
 .hero-lede { margin-top: 1.8rem; font-size: 1.12rem; max-width: 30rem; color: rgba(255, 246, 247, .82); }

@@ -288,8 +288,10 @@
     return `<path d="${path}" fill="${DARK}" opacity=".35" transform="translate(1.5 3)" filter="${U("b2")}"/>
       <path d="${topPath(t)}" style="fill:var(--drip)"/>
       <path d="${path}" style="fill:var(--drip)"/>
-      ${d.drip === "gold" ? `<path d="${path}" fill="${U("goldDrip")}"/><path d="${topPath(t)}" fill="${U("goldPool")}"/>` : ""}
+      ${d.drip === "gold" ? `<path d="${path}" fill="${U("goldDrip")}"/>` : ""}
       <path d="${path}" fill="${U("shadeH")}" opacity=".5"/>
+      <path d="${topPath(t)}" style="fill:var(--drip)"/>
+      ${d.drip === "gold" ? `<path d="${topPath(t)}" fill="${U("goldPool")}"/>` : ""}
       <path d="${topPath(t)}" fill="${U("pool")}"/>
       <path d="${frontArc(t, t.top + 1)}" fill="none" stroke="#fff" stroke-width="1.6" opacity=".5"/>
       ${hi}`;
