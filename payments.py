@@ -426,55 +426,103 @@ def report(month=None):
 
 
 # ----------------------------------------------------------- Connect onboarding
-def start_onboarding(base_url):
-    """Create the bakery's Express account if needed and return a Stripe onboarding link."""
-    if not enabled():
-        return None, _("Add STRIPE_SECRET_KEY on Railway first.")
-    acct = connect_account()
-    if not acct:
-        body, err = _stripe("POST", "/accounts", {
-            "type": "express", "country": "US",
-            "capabilities[card_payments][requested]": "true",
-            "capabilities[transfers][requested]": "true",
-            "business_profile[name]": BUSINESS,
-            "business_profile[mcc]": "5462",          # bakeries
-            "business_profile[url]": base_url,
-            "settings[payments][statement_descriptor]": DESCRIPTOR,
-            "settings[branding][primary_color]": "#5E0F25",
-            "settings[branding][secondary_color]": "#C9A24A",
-        })
-        if err:
-            return None, err
-        acct = body["id"]
-        store.set_setting("connect_account", acct)
-        brand_account(acct)
-    body, err = _stripe("POST", "/account_links", {
-        "account": acct, "type": "account_onboarding",
-        "refresh_url": f"{base_url}/admin/stripe/connect",
-        "return_url": f"{base_url}/admin/stripe/return",
-    })
-    if err:
-        return None, err
-    return body["url"], ""
+STRIPE_V2_VERSION = os.environ.get("STRIPE_V2_VERSION", "2026-09-30.endive")
 
 
-def brand_account(acct):
-    """Put the bakery's logo and colors on its Stripe account, so Checkout and receipts look like the bakery."""
-    if store.setting("connect_branded") == acct or not ICON.exists():
-        return
+def _v2(method, path, body=None, params=None):
+    """Stripe API v2 (JSON). Accounts are created here; v1 endpoints accept the same acct_ IDs."""
+    headers = {"Authorization": f"Bearer {_key()}", "Stripe-Version": STRIPE_V2_VERSION}
+    try:
+        r = requests.request(method, "https://api.stripe.com" + path, json=body, params=params, headers=headers, timeout=30)
+        data = r.json()
+    except Exception as e:
+        return None, f"Couldn't reach Stripe ({e.__class__.__name__})."
+    if r.status_code >= 400:
+        err = data.get("error") or {}
+        return None, err.get("message") or err.get("code") or f"Stripe said {r.status_code}."
+    return data, ""
+
+
+def _upload_icon():
+    if not ICON.exists():
+        return ""
     with open(ICON, "rb") as fh:
         f, err = _stripe("POST", "/files", {"purpose": "business_icon"}, files={"file": ("icon.png", fh, "image/png")},
                          base="https://files.stripe.com/v1")
     if err:
         log.warning("icon upload failed: %s", err)
+        return ""
+    return f["id"]
+
+
+def start_onboarding(base_url):
+    """Create the bakery's connected account (Accounts v2) if needed and return a Stripe onboarding link.
+
+    merchant  -> takes card payments as the merchant of record (destination charges with on_behalf_of)
+    recipient -> receives the transfer of its share (stripe_transfers, required for destination charges)
+    The platform pays Stripe's fees and covers losses (required for the Express dashboard)."""
+    if not enabled():
+        return None, _("Add STRIPE_SECRET_KEY on Railway first.")
+    acct = connect_account()
+    if not acct:
+        branding = {"primary_color": "#5E0F25", "secondary_color": "#C9A24A"}
+        icon = _upload_icon()
+        if icon:
+            branding["icon"] = icon
+        body = {
+            "display_name": BUSINESS,
+            "dashboard": "express",
+            "identity": {"country": "us"},
+            "configuration": {
+                "merchant": {
+                    "capabilities": {"card_payments": {"requested": True}},
+                    "mcc": "5462",                                   # bakeries
+                    "statement_descriptor": {"descriptor": DESCRIPTOR},
+                    "branding": branding,
+                },
+                "recipient": {"capabilities": {"stripe_balance": {"stripe_transfers": {"requested": True}}}},
+            },
+            "defaults": {"currency": "usd",
+                         "responsibilities": {"fees_collector": "application", "losses_collector": "application"}},
+            "include": ["configuration.merchant", "configuration.recipient"],
+        }
+        if base_url.startswith("https://"):
+            body["defaults"]["profile"] = {"business_url": base_url}
+        made, err = _v2("POST", "/v2/core/accounts", body)
+        if err and "profile" in body["defaults"] and "url" in err.lower():
+            body["defaults"].pop("profile")
+            made, err = _v2("POST", "/v2/core/accounts", body)
+        if err:
+            return None, err
+        acct = made["id"]
+        store.set_setting("connect_account", acct)
+        store.set_setting("connect_branded", acct if icon else "")
+    onboarding = {"return_url": f"{base_url}/admin/stripe/return", "refresh_url": f"{base_url}/admin/stripe/connect",
+                  "configurations": ["merchant", "recipient"]}
+    link, err = _v2("POST", "/v2/core/account_links", {"account": acct, "use_case": {"type": "account_onboarding",
+                                                                                   "account_onboarding": onboarding}})
+    if err and "configurations" in err.lower():
+        onboarding.pop("configurations")
+        link, err = _v2("POST", "/v2/core/account_links", {"account": acct, "use_case": {"type": "account_onboarding",
+                                                                                       "account_onboarding": onboarding}})
+    if err:
+        return None, err
+    return link["url"], ""
+
+
+def brand_account(acct):
+    """Make sure the bakery's Stripe account carries its icon and colors (Checkout and receipts)."""
+    if store.setting("connect_branded") == acct:
         return
-    _b, err = _stripe("POST", f"/accounts/{acct}", {"settings[branding][icon]": f["id"],
-                                                     "settings[branding][primary_color]": "#5E0F25",
-                                                     "settings[branding][secondary_color]": "#C9A24A"})
-    if not err:
-        store.set_setting("connect_branded", acct)
-    else:
+    icon = _upload_icon()
+    if not icon:
+        return
+    _b, err = _v2("POST", f"/v2/core/accounts/{acct}", {"configuration": {"merchant": {"branding": {
+        "icon": icon, "primary_color": "#5E0F25", "secondary_color": "#C9A24A"}}}})
+    if err:
         log.warning("branding failed: %s", err)
+    else:
+        store.set_setting("connect_branded", acct)
 
 
 def refresh_connect():
