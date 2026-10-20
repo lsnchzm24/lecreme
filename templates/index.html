@@ -15,7 +15,10 @@
     {% endif %}
   </div>
   <figure class="hero-stage">
-    <svg id="hero-cake" class="cake-svg" role="img" aria-label="A cake being built layer by layer"></svg>
+    <div class="hero-art">
+      <svg id="hero-cake" class="cake-svg" role="img" aria-label="A cake being built layer by layer"></svg>
+      <div id="hero3d" class="cake3d" aria-hidden="true"></div>
+    </div>
     <figcaption id="hero-caption" aria-live="polite">Vanilla bean sponge</figcaption>
   </figure>
 </section>
@@ -77,4 +80,5 @@
 <script>window.LC_MENU = {{ menu_json|safe }};</script>
 <script src="{{ url_for('static', filename='cake.js') }}?v={{ asset_v }}"></script>
 <script src="{{ url_for('static', filename='home.js') }}?v={{ asset_v }}"></script>
+<script type="module" src="{{ url_for('static', filename='cake3d.js') }}?v={{ asset_v }}"></script>
 {% endblock %}

@@ -5,7 +5,7 @@
 {% block main %}
 <div class="order">
   <section class="order-hero">
-    <div class="order-art"><svg id="order-cake" class="cake-svg" role="img" aria-label="Your cake"></svg></div>
+    <div class="order-art"><svg id="order-cake" class="cake-svg" role="img" aria-label="Your cake"></svg><div id="order3d" class="cake3d" aria-hidden="true"></div></div>
     <div class="order-head">
       <p class="order-no">Order #{{ o.id }} for {{ o.name.split()[0] }}</p>
       <h1 id="o-title">{{ view.title }}</h1>
@@ -66,4 +66,5 @@
 <script>window.LC_ORDER = {token: {{ o.token|tojson }}, design: {{ view.design_json|safe }}, status: {{ view.status|tojson }}, paidFlag: {{ (request.args.get('paid') or '')|tojson }} };</script>
 <script src="{{ url_for('static', filename='cake.js') }}?v={{ asset_v }}"></script>
 <script src="{{ url_for('static', filename='order.js') }}?v={{ asset_v }}"></script>
+<script type="module" src="{{ url_for('static', filename='cake3d.js') }}?v={{ asset_v }}"></script>
 {% endblock %}

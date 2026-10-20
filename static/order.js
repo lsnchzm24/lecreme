@@ -3,6 +3,13 @@
   const O = window.LC_ORDER;
   fetch("/api/menu").then(r => r.json()).then(m => {
     LCake.render(document.getElementById("order-cake"), O.design, m, { animateFirst: true, stagger: 50 });
+    const start3D = () => {
+      if (!window.LCake3D || document.querySelector(".order-art.has-3d")) return;
+      try { LCake3D.create(document.getElementById("order3d"), m, { autoRotate: true }).update(O.design); } catch (e) { return; }
+      document.querySelector(".order-art").classList.add("has-3d");
+    };
+    window.addEventListener("lcake3d:ready", start3D);
+    start3D();
   });
 
   function stamp(root) {

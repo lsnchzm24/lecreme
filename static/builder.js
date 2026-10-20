@@ -60,8 +60,10 @@
 
   // ------------------------------------------------------------------ cake
   const svg = $("#cake");
+  let viewer = null;
   function draw() {
-    LCake.render(svg, d, M, { view, stagger: 30, highlight: STEPS[step].id === "flavor" && tierCount(d) > 1 ? tierTab : -1 });
+    const opts = { view, stagger: 30, highlight: STEPS[step].id === "flavor" && tierCount(d) > 1 ? tierTab : -1 };
+    if (viewer) viewer.update(d, opts); else LCake.render(svg, d, M, opts);
     const n = tierCount(d);
     $("#layers").innerHTML = Array.from({ length: n }, (_, i) => {
       const fl = by("flavors", d.flavors[i]), fi = by("fillings", d.fillings[i]);
@@ -457,6 +459,20 @@
     } catch (e) { toast("You seem to be offline. Check your connection and try again."); }
     sending = false; btn.disabled = false; btn.textContent = label;
   }
+
+  // Real 3D cake once WebGL is ready; the drawing above stays as the fallback.
+  function start3D() {
+    if (viewer || !window.LCake3D) return;
+    try { viewer = LCake3D.create($("#cake3d"), M, {}); } catch (e) { viewer = null; return; }
+    $(".stage-art").classList.add("has-3d");
+    draw();
+    const hint = $("#spin-hint");
+    hint.classList.add("is-on");
+    $("#cake3d").addEventListener("cake:spun", () => hint.classList.remove("is-on"), { once: true });
+    setTimeout(() => hint.classList.remove("is-on"), 6000);
+  }
+  window.addEventListener("lcake3d:ready", start3D);
+  start3D();
 
   // ------------------------------------------------------------------ go
   if (location.hash.startsWith("#d=")) history.replaceState(null, "", location.pathname);

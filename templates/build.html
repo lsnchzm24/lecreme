@@ -14,6 +14,8 @@
     </div>
     <div class="stage-art">
       <svg id="cake" class="cake-svg" role="img" aria-labelledby="cake-desc"></svg>
+      <div id="cake3d" class="cake3d" aria-hidden="true"></div>
+      <p class="spin-hint" id="spin-hint">Drag to turn your cake</p>
       <p id="cake-desc" class="visually-hidden"></p>
     </div>
     <ul class="stage-layers" id="layers" aria-label="What's inside"></ul>
@@ -48,4 +50,5 @@
 </script>
 <script src="{{ url_for('static', filename='cake.js') }}?v={{ asset_v }}"></script>
 <script src="{{ url_for('static', filename='builder.js') }}?v={{ asset_v }}"></script>
+<script type="module" src="{{ url_for('static', filename='cake3d.js') }}?v={{ asset_v }}"></script>
 {% endblock %}

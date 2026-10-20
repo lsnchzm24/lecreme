@@ -1,7 +1,8 @@
 (function () {
   "use strict";
   const M = window.LC_MENU;
-  document.querySelectorAll(".sig-svg").forEach(svg => {
+  const sigSvgs = [...document.querySelectorAll(".sig-svg")];
+  sigSvgs.forEach(svg => {
     try { LCake.render(svg, JSON.parse(svg.dataset.design), M); } catch (e) { /* leave blank */ }
   });
 
@@ -20,22 +21,40 @@
     [{ topper: "script", topper_text: "Celebrate" }, "Your words on top"],
   ];
   const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  let d = Object.assign({}, base);
+  let d = Object.assign({}, base), viewer = null;
+  const show = (opts) => viewer ? viewer.update(d) : LCake.render(svg, d, M, opts || { stagger: 40 });
+
+  // Swap the drawings for real 3D renders once WebGL is ready.
+  function start3D() {
+    if (viewer || !window.LCake3D) return;
+    try { viewer = LCake3D.create(document.getElementById("hero3d"), M, { autoRotate: true, interactive: true }); } catch (e) { return; }
+    document.querySelector(".hero-art").classList.add("has-3d");
+    show();
+    sigSvgs.forEach(async s => {
+      const url = await LCake3D.snapshot(JSON.parse(s.dataset.design), M, 520, 560);
+      const img = new Image();
+      img.src = url; img.alt = ""; img.className = "sig-img";
+      img.onload = () => s.replaceWith(img);
+    });
+  }
+  window.addEventListener("lcake3d:ready", start3D);
+  start3D();
+
   if (reduce) {
     steps.forEach(s => Object.assign(d, s[0]));
-    LCake.render(svg, d, M);
+    show();
     cap.textContent = "Every detail, your choice";
     return;
   }
   let i = 0;
-  LCake.render(svg, d, M, { animateFirst: true, stagger: 60 });
+  if (!viewer) LCake.render(svg, d, M, { animateFirst: true, stagger: 60 });
   function next() {
     i += 1;
     if (i >= steps.length) { setTimeout(() => { cap.textContent = "Every detail, your choice"; }, 1400); return; }
     Object.assign(d, steps[i][0]);
-    LCake.render(svg, d, M, { stagger: 40 });
+    show();
     cap.textContent = steps[i][1];
-    setTimeout(next, 1250);
+    setTimeout(next, 1350);
   }
-  setTimeout(next, 1300);
+  setTimeout(next, 1400);
 })();

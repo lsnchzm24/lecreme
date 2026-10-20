@@ -69,4 +69,5 @@
 <script>window.LC_MENU = {{ menu_json|safe }}; window.LC_FEE = {{ fee_pct }};</script>
 <script src="{{ url_for('static', filename='cake.js') }}?v={{ asset_v }}"></script>
 <script src="{{ url_for('static', filename='admin.js') }}?v={{ asset_v }}"></script>
+<script type="module" src="{{ url_for('static', filename='cake3d.js') }}?v={{ asset_v }}"></script>
 {% endblock %}

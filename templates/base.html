@@ -13,6 +13,7 @@
   <meta property="og:image" content="{{ url_for('static', filename='img/og.png', _external=True) }}">
   <link rel="preload" href="{{ url_for('static', filename='fonts/bricolage.woff2') }}" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v={{ asset_v }}">
+  <script type="importmap">{"imports": {"three": "{{ url_for('static', filename='vendor/three.module.min.js') }}", "three/addons/": "{{ url_for('static', filename='vendor/addons/') }}"}}</script>
   {% block head %}{% endblock %}
 </head>
 <body class="{% block bodyclass %}{% endblock %}">

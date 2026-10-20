@@ -51,7 +51,20 @@
         <div class="o-cards">${groups[date].map(card).join("")}</div>`;
     }).join("");
     el.querySelectorAll("svg[data-i]").forEach(s => LCake.render(s, orders[+s.dataset.i].design, M));
+    photoThumbs();
   }
+  // Real 3D thumbnails once WebGL is ready (the drawings stay if it isn't).
+  function photoThumbs() {
+    if (!window.LCake3D) return;
+    document.querySelectorAll("svg.ord-svg[data-i]").forEach(async s => {
+      const o = orders[+s.dataset.i]; if (!o) return;
+      const url = await LCake3D.snapshot(o.design, M, 200, 224);
+      if (!s.isConnected) return;
+      const img = new Image(); img.src = url; img.alt = ""; img.className = "ord-svg"; s.replaceWith(img);
+    });
+  }
+  window.addEventListener("lcake3d:ready", photoThumbs);
+
   function card(o) {
     const i = orders.indexOf(o), nx = NEXT[o.status];
     return `<article class="o-card ord st-${o.status}" data-id="${o.id}">
