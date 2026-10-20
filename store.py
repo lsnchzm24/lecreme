@@ -38,7 +38,8 @@ CREATE TABLE IF NOT EXISTS orders (
     units INTEGER NOT NULL DEFAULT 1,
     hold_until TEXT NOT NULL DEFAULT '',
     photo TEXT NOT NULL DEFAULT '',
-    kitchen_note TEXT NOT NULL DEFAULT ''
+    kitchen_note TEXT NOT NULL DEFAULT '',
+    lang TEXT NOT NULL DEFAULT 'en'
 );
 CREATE INDEX IF NOT EXISTS idx_orders_date ON orders(pickup_date);
 CREATE TABLE IF NOT EXISTS payments (
@@ -88,6 +89,7 @@ DEFAULTS = {
     "pickup_note": "Bring your order link or name. Cakes travel best flat on a car floor, kept cool.",
     "connect_account": "",
     "connect_ready": "0",
+    "admin_lang": "en",
     "prices": "{}",
     "hidden": "[]",
 }
@@ -111,6 +113,8 @@ def db():
     if not _ready:
         conn.executescript(SCHEMA)
         conn.execute("PRAGMA journal_mode=WAL")
+        if "lang" not in {r["name"] for r in conn.execute("PRAGMA table_info(orders)")}:
+            conn.execute("ALTER TABLE orders ADD COLUMN lang TEXT NOT NULL DEFAULT 'en'")
         for k, v in DEFAULTS.items():
             conn.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (k, v))
         conn.commit()
@@ -170,10 +174,10 @@ def _order(row):
 def create_order(conn, **f):
     cur = conn.execute(
         "INSERT INTO orders (token, created_at, status, name, phone, email, occasion, design, quote, total_cents, "
-        "deposit_cents, pickup_date, pickup_time, units, hold_until, photo) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "deposit_cents, pickup_date, pickup_time, units, hold_until, photo, lang) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (new_token(), now_iso(), f["status"], f["name"], f["phone"], f.get("email", ""), f.get("occasion", ""),
          json.dumps(f["design"]), json.dumps(f["quote"]), f["total_cents"], f["deposit_cents"], f["pickup_date"],
-         f["pickup_time"], f["units"], f.get("hold_until", ""), f.get("photo", "")))
+         f["pickup_time"], f["units"], f.get("hold_until", ""), f.get("photo", ""), f.get("lang", "en")))
     return cur.lastrowid
 
 

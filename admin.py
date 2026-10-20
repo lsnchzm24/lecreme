@@ -18,6 +18,7 @@ import mailer
 import payments
 import schedule
 import store
+from i18n import STATUS, _
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
 _ctx = {}
@@ -52,7 +53,7 @@ def guard():
             abort(403)
     if request.endpoint not in ("admin.login",) and not signed_in():
         if request.path.startswith("/admin/api/"):
-            return jsonify({"error": "Signed out. Refresh to sign in again."}), 401
+            return jsonify({"error": _("Signed out. Refresh to sign in again.")}), 401
         return redirect(url_for("admin.login"))
 
 
@@ -65,7 +66,7 @@ def login():
         while q and time.time() - q[0] > 900:
             q.popleft()
         if len(q) >= 8:
-            error = "Too many tries. Wait 15 minutes."
+            error = _("Too many tries. Wait 15 minutes.")
         elif hmac.compare_digest(request.form.get("password", "").strip(), _password()):
             session.clear()
             session["admin"] = _sig()
@@ -73,7 +74,7 @@ def login():
             return redirect(url_for("admin.home"))
         else:
             q.append(time.time())
-            error = "That password didn't match."
+            error = _("That password didn't match.")
     return render_template("admin_login.html", error=error)
 
 
@@ -97,7 +98,7 @@ def _row(o):
     st = o["status"]
     if st == "pending" and o["hold_until"] < store.now_iso():
         st = "expired"
-    return {"id": o["id"], "token": o["token"], "status": st, "status_label": _ctx["STATUS"].get(st, (st,))[0],
+    return {"id": o["id"], "token": o["token"], "status": st, "status_label": _(STATUS.get(st, (st,))[0]),
             "name": o["name"], "phone": o["phone"], "email": o["email"], "occasion": o["occasion"],
             "date": o["pickup_date"], "time": o["pickup_time"], "when": schedule.label(o["pickup_date"], o["pickup_time"], long=False),
             "total": o["total_cents"], "paid": paid, "due": max(o["total_cents"] - paid, 0), "units": o["units"],
@@ -126,10 +127,9 @@ def set_status(oid):
     o = store.get_order(oid)
     st = (request.get_json(silent=True) or {}).get("status")
     if not o or st not in FLOW:
-        return jsonify({"error": "Unknown order or status."}), 400
+        return jsonify({"error": _("Unknown order or status.")}), 400
     store.update_order(oid, status=st, hold_until="")
-    label = _ctx["STATUS"][st][0]
-    store.add_event(oid, st, f"{label}. {_ctx['STATUS'][st][1]}")
+    store.add_event(oid, st, f"{STATUS[st][0]}. {STATUS[st][1]}")      # saved in English, shown in each reader's language
     if st == "ready":
         _ctx["notify"](oid, "ready")
     return jsonify(_row(store.get_order(oid)))
@@ -152,7 +152,7 @@ def in_person(oid):
         cents = 0
     method = body.get("method") if body.get("method") in ("cash", "card", "zelle", "other") else "other"
     if not o or cents <= 0:
-        return jsonify({"error": "Enter the amount received."}), 400
+        return jsonify({"error": _("Enter the amount received.")}), 400
     payments.record_in_person(o, cents, method)
     return jsonify(_row(store.get_order(oid)))
 
@@ -192,7 +192,7 @@ def day():
     b = request.get_json(silent=True) or {}
     d = schedule.parse_date(b.get("date", ""))
     if not d:
-        return jsonify({"error": "Bad date."}), 400
+        return jsonify({"error": _("Pick a date.")}), 400
     iso = d.isoformat()
     if "blackout" in b:
         blk = schedule.blackouts()
@@ -228,7 +228,7 @@ def save_settings():
             try:
                 store.set_setting(k, min(max(int(b[k]), lo), hi))
             except (TypeError, ValueError):
-                return jsonify({"error": f"{k.replace('_', ' ')} needs a number."}), 400
+                return jsonify({"error": _("Every number field needs a number.")}), 400
     if isinstance(b.get("hours"), dict):
         clean = {}
         for d in schedule.DAYS:
@@ -236,7 +236,7 @@ def save_settings():
             clean[d] = {"on": bool(v.get("on")), "start": schedule._hhmm(v.get("start"), "09:00"),
                         "end": schedule._hhmm(v.get("end"), "18:00")}
             if clean[d]["end"] <= clean[d]["start"]:
-                return jsonify({"error": f"{d.title()}: closing time must be after opening time."}), 400
+                return jsonify({"error": _("Closing time must be after opening time.")}), 400
         store.set_setting("hours", json.dumps(clean))
     for k in ("pickup_address", "pickup_note"):
         if k in b:
@@ -254,7 +254,7 @@ def save_menu():
             try:
                 prices[k] = max(0, int(round(float(v) * 100)))
             except (TypeError, ValueError):
-                return jsonify({"error": f"Price for {k} needs a number."}), 400
+                return jsonify({"error": _("Every price needs a number.")}), 400
     allk = {f"{g}.{o['id']}" for g in catalog.GROUPS for o in catalog.GROUPS[g]}
     hidden = sorted(k for k in (b.get("hidden") or []) if k in allk)
     store.set_setting("prices", json.dumps(prices))
@@ -277,7 +277,7 @@ def pay_report():
 def stripe_connect():
     url, err = payments.start_onboarding(_ctx["base_url"]())
     if err:
-        return render_template("admin_msg.html", title="Stripe couldn't start", message=err), 502
+        return render_template("admin_msg.html", title=_("Stripe couldn't start"), message=err), 502
     return redirect(url)
 
 
@@ -291,5 +291,5 @@ def stripe_return():
 def stripe_dashboard():
     url, err = payments.dashboard_link()
     if not url:
-        return render_template("admin_msg.html", title="Stripe dashboard", message=err or "Finish connecting first."), 400
+        return render_template("admin_msg.html", title=_("Stripe dashboard"), message=err or _("Finish connecting first.")), 400
     return redirect(url)

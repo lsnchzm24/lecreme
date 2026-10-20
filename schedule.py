@@ -12,6 +12,8 @@ from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import store
+from i18n import _
+import i18n
 
 TZ = ZoneInfo(os.environ.get("BAKERY_TZ", "America/New_York"))
 DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
@@ -152,35 +154,31 @@ def can_book(conn, d, time, units, extra_days):
     """Checked inside the write transaction that saves the order. Returns an error or ""."""
     end = today() + timedelta(days=store.setting_int("booking_days", 75, 7, 365))
     if d > end:
-        return "That date is past our booking window. Please pick an earlier date or call us."
+        return _("That date is past our booking window. Please pick an earlier date or call us.")
     info, times = slots(d, units, extra_days, conn)
     if info["status"] == "soon":
-        return "This design needs a little more notice. Please pick a later date."
+        return _("This design needs a little more notice. Please pick a later date.")
     if info["status"] == "closed":
-        return "We're closed that day. Please pick another date."
+        return _("We're closed that day. Please pick another date.")
     if info["status"] == "full":
-        return "That day just filled up. Please pick another date."
+        return _("That day just filled up. Please pick another date.")
     match = next((t for t in times if t["time"] == time), None)
     if not match:
-        return "Please pick a pickup time."
+        return _("Please pick a pickup time.")
     if not match["open"]:
-        return "Someone just took that pickup time. Please pick another."
+        return _("Someone just took that pickup time. Please pick another.")
     return ""
 
 
-def label(d_iso, t="", long=True):
+def label(d_iso, t="", long=True, lang=None):
     d = parse_date(d_iso)
     if not d:
         return d_iso
-    s = d.strftime("%A, %B ") + str(d.day) if long else d.strftime("%a %b ") + str(d.day)
+    s = i18n.date_label(d, lang, long)
     if t:
-        s += " at " + time_label(t)
+        s += i18n.at(lang) + time_label(t, lang)
     return s
 
 
-def time_label(t):
-    try:
-        x = datetime.strptime(t, "%H:%M")
-    except ValueError:
-        return t
-    return x.strftime("%I:%M %p").lstrip("0").replace(":00 ", " ")
+def time_label(t, lang=None):
+    return i18n.time_label(t, lang)

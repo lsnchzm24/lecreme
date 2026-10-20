@@ -1,35 +1,46 @@
 <!doctype html>
-<html lang="en">
+<html lang="{{ lang }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>{% block title %}{{ brand.name }}{% endblock %}</title>
-  <meta name="description" content="{% block description %}Design your own custom cake at {{ brand.name }}. Pick every layer, see it come together, choose your pickup time and reserve with a deposit.{% endblock %}">
+  <meta name="description" content="{% block description %}{{ _('Design your own custom cake at {shop}. Pick every flavor and detail, watch it come to life, and choose when to pick it up.', shop=brand.name) }}{% endblock %}">
   <meta name="theme-color" content="#5E0F25">
   <link rel="icon" href="{{ url_for('static', filename='img/icon.png') }}">
   <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/icon.png') }}">
   <meta property="og:title" content="{{ brand.name }}">
-  <meta property="og:description" content="Design your cake, see it before it's baked, pick it up fresh.">
+  <meta property="og:description" content="{{ _('Design your cake, see it before it is baked, pick it up fresh.') }}">
   <meta property="og:image" content="{{ url_for('static', filename='img/og.png', _external=True) }}">
   <link rel="preload" href="{{ url_for('static', filename='fonts/bricolage.woff2') }}" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v={{ asset_v }}">
   <script type="importmap">{"imports": {"three": "{{ url_for('static', filename='vendor/three.module.min.js') }}", "three/addons/": "{{ url_for('static', filename='vendor/addons/') }}"}}</script>
+  <script>
+    window.LC_LANG = {{ lang|tojson }};
+    window.LC_LOCALE = {{ ('es-US' if lang == 'es' else 'en-US')|tojson }};
+    window.LC_T = {{ js_strings|tojson }};
+    window._t = function (s, v) {
+      var t = (window.LC_T && window.LC_T[s]) || s;
+      if (v) for (var k in v) t = t.split("{" + k + "}").join(v[k]);
+      return t;
+    };
+  </script>
   {% block head %}{% endblock %}
 </head>
 <body class="{% block bodyclass %}{% endblock %}">
-  <a class="skip" href="#main">Skip to content</a>
+  <a class="skip" href="#main">{{ _('Skip to content') }}</a>
   {% block header %}
   <header class="top {% block topclass %}{% endblock %}">
-    <a class="lockup" href="{{ url_for('home') }}" aria-label="{{ brand.name }} home">
-      <span class="lockup-script">Le Créme</span><span class="lockup-sub">Bakery</span>
+    <a class="lockup" href="{{ url_for('home') }}" aria-label="{{ _('{shop} home', shop=brand.name) }}">
+      <span class="lockup-script">Le Créme</span><span class="lockup-sub">{{ _('Bakery') }}</span>
     </a>
-    <nav class="top-nav" aria-label="Main">
-      <a href="{{ url_for('home') }}#signatures">Signature cakes</a>
-      <a href="{{ url_for('home') }}#how">How ordering works</a>
-      <a href="{{ url_for('home') }}#availability">Availability</a>
+    <nav class="top-nav" aria-label="{{ _('Main') }}">
+      <a href="{{ url_for('home') }}#signatures">{{ _('Signature cakes') }}</a>
+      <a href="{{ url_for('home') }}#how">{{ _('How it works') }}</a>
+      <a href="{{ url_for('home') }}#availability">{{ _('Availability') }}</a>
       <a href="tel:{{ brand.phone_href }}">{{ brand.phone }}</a>
     </nav>
-    <a class="btn btn-gilt btn-sm top-cta" href="{{ url_for('build') }}">Design your cake</a>
+    <a class="btn btn-gilt btn-sm top-cta" href="{{ url_for('build') }}">{{ _('Design your cake') }}</a>
+    {% include "_lang.html" %}
   </header>
   {% endblock %}
   <main id="main">{% block main %}{% endblock %}</main>
@@ -37,23 +48,23 @@
   <footer class="foot">
     <div class="foot-inner">
       <div>
-        <div class="lockup lockup-lg"><span class="lockup-script">Le Créme</span><span class="lockup-sub">Bakery</span></div>
-        <p class="foot-line">Custom cakes, baked to order and finished by hand.</p>
+        <div class="lockup lockup-lg"><span class="lockup-script">Le Créme</span><span class="lockup-sub">{{ _('Bakery') }}</span></div>
+        <p class="foot-line">{{ _('Custom cakes, baked to order and finished by hand.') }}</p>
       </div>
       <div class="foot-col">
-        <h2>Talk to us</h2>
+        <h2>{{ _('Talk to us') }}</h2>
         <a class="foot-phone" href="tel:{{ brand.phone_href }}">{{ brand.phone }}</a>
-        <a href="sms:{{ brand.phone_href }}">Send a text</a>
+        <a href="sms:{{ brand.phone_href }}">{{ _('Send a text') }}</a>
         {% if brand.instagram %}<a href="https://instagram.com/{{ brand.instagram }}" rel="noopener">Instagram</a>{% endif %}
       </div>
       <div class="foot-col">
-        <h2>Order</h2>
-        <a href="{{ url_for('build') }}">Design your cake</a>
-        <a href="{{ url_for('home') }}#signatures">Start from a signature</a>
-        <a href="{{ url_for('home') }}#availability">Check availability</a>
+        <h2>{{ _('Order') }}</h2>
+        <a href="{{ url_for('build') }}">{{ _('Design your cake') }}</a>
+        <a href="{{ url_for('home') }}#signatures">{{ _('Start from a signature') }}</a>
+        <a href="{{ url_for('home') }}#availability">{{ _('Check availability') }}</a>
       </div>
     </div>
-    <p class="foot-small">&copy; {{ year }} {{ brand.name }}. Made in a kitchen that also handles nuts, dairy, eggs, wheat and soy.</p>
+    <p class="foot-small">&copy; {{ year }} {{ brand.name }}. {{ _('Made in a kitchen that also handles nuts, dairy, eggs, wheat and soy.') }}</p>
   </footer>
   {% endblock %}
   {% block scripts %}{% endblock %}

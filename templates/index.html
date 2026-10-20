@@ -4,40 +4,40 @@
 {% block main %}
 <section class="hero">
   <div class="hero-copy">
-    <h1><span>Design it.</span><span>Watch it rise.</span><span>Pick it up.</span></h1>
-    <p class="hero-lede">Choose every layer, filling and finish and see your cake take shape as you go. Then pick a pickup time and reserve it with a deposit, all in a couple of minutes.</p>
+    <h1><span>{{ _('Design it.') }}</span><span>{{ _('Watch it rise.') }}</span><span>{{ _('Pick it up.') }}</span></h1>
+    <p class="hero-lede">{{ _("Pick the flavors, colors and little touches you love, and watch your cake come to life right in front of you. Then choose the day you'd like to pick it up. We'll take care of the rest.") }}</p>
     <div class="hero-actions">
-      <a class="btn btn-gilt" href="{{ url_for('build') }}">Design your cake</a>
-      <a class="btn btn-ghost-light" href="#signatures">Start from a signature</a>
+      <a class="btn btn-gilt" href="{{ url_for('build') }}">{{ _('Design your cake') }}</a>
+      <a class="btn btn-ghost-light" href="#signatures">{{ _('Start from a signature') }}</a>
     </div>
     {% if next_label %}
-    <p class="hero-next"><span class="dot dot-open" aria-hidden="true"></span>Next pickup available {{ next_label }}</p>
+    <p class="hero-next"><span class="dot dot-open" aria-hidden="true"></span>{{ _('Next pickup available {date}', date=next_label) }}</p>
     {% endif %}
   </div>
   <figure class="hero-stage">
     <div class="hero-art">
-      <svg id="hero-cake" class="cake-svg" role="img" aria-label="A cake being built layer by layer"></svg>
+      <svg id="hero-cake" class="cake-svg" role="img" aria-label="{{ _('A cake being built layer by layer') }}"></svg>
       <div id="hero3d" class="cake3d" aria-hidden="true"></div>
     </div>
-    <figcaption id="hero-caption" aria-live="polite">Vanilla bean sponge</figcaption>
+    <figcaption id="hero-caption" aria-live="polite">{{ _('Vanilla bean sponge, strawberry preserves') }}</figcaption>
   </figure>
 </section>
 
 <section class="how" id="how" aria-labelledby="how-h">
-  <h2 id="how-h" class="section-h">How ordering works</h2>
+  <h2 id="how-h" class="section-h">{{ _('How it works') }}</h2>
   <ol class="how-steps">
-    <li><h3>Design it</h3><p>Pick the size, sponge, filling, finish and decorations. The cake on screen changes with every tap.</p></li>
-    <li><h3>Choose a pickup time</h3><p>The calendar shows real openings in our kitchen, based on how much work your design takes.</p></li>
-    <li><h3>Reserve with a deposit</h3><p>Pay half today to lock the date. The balance is due at pickup, online or in person.</p></li>
-    <li><h3>Follow along</h3><p>Your order page shows when it's baking, being decorated and ready.</p></li>
-    <li><h3>Pick it up</h3><p>Boxed, chilled and exactly what you designed.</p></li>
+    <li><h3>{{ _('Design it') }}</h3><p>{{ _('Pick the size, sponge, filling, finish and decorations. The cake on screen changes with every tap.') }}</p></li>
+    <li><h3>{{ _('Choose your day') }}</h3><p>{{ _('The calendar shows real openings in our kitchen, so you always know when your cake can be ready.') }}</p></li>
+    <li><h3>{{ _('Save your spot') }}</h3><p>{{ _('Hold your date in a few taps and pay the rest when you pick it up.') }}</p></li>
+    <li><h3>{{ _('Follow along') }}</h3><p>{{ _("Your order page shows when it's baking, being decorated and ready.") }}</p></li>
+    <li><h3>{{ _('Pick it up') }}</h3><p>{{ _('Boxed, chilled and exactly what you designed.') }}</p></li>
   </ol>
 </section>
 
 <section class="sigs" id="signatures" aria-labelledby="sig-h">
   <div class="sigs-head">
-    <h2 id="sig-h" class="section-h">Start from a signature</h2>
-    <p>Open any of these in the designer and make it yours: swap the flavor, change the color, add a message.</p>
+    <h2 id="sig-h" class="section-h">{{ _('Start from a signature') }}</h2>
+    <p>{{ _('Open any of these in the designer and make it yours: swap the flavor, change the color, add a message.') }}</p>
   </div>
   <div class="sig-grid">
     {% for s in signatures %}
@@ -46,7 +46,7 @@
       <div class="sig-body">
         <h3>{{ s.name }}</h3>
         <p>{{ s.blurb }}</p>
-        <p class="sig-meta"><span>{{ money(s.price) }}</span><span>Serves {{ s.servings }}</span></p>
+        <p class="sig-meta"><span>{{ money(s.price) }}</span><span>{{ _('Serves {n}', n=s.servings) }}</span></p>
       </div>
     </a>
     {% endfor %}
@@ -55,24 +55,24 @@
 
 <section class="avail" id="availability" aria-labelledby="av-h">
   <div class="avail-head">
-    <h2 id="av-h" class="section-h">The next two weeks</h2>
-    <p>Openings for a one-tier cake. Larger designs need a little more notice, and the designer checks your exact cake.</p>
+    <h2 id="av-h" class="section-h">{{ _('The next two weeks') }}</h2>
+    <p>{{ _('Openings for a one-tier cake. Larger designs need a little more notice, and the designer checks your exact cake.') }}</p>
   </div>
   <ul class="week">
     {% for d in week %}{% set p = d.date|dparts %}
     <li class="day day-{{ d.status }}">
       <span class="day-dow">{{ p.dow }}</span>
       <span class="day-num">{{ p.day }}</span>
-      <span class="day-state">{% if d.status == 'open' %}Open{% elif d.status == 'limited' %}Few spots{% elif d.status == 'full' %}Booked{% elif d.status == 'soon' %}Too soon{% else %}Closed{% endif %}</span>
+      <span class="day-state">{% if d.status == 'open' %}{{ _('Open') }}{% elif d.status == 'limited' %}{{ _('Few spots') }}{% elif d.status == 'full' %}{{ _('Booked') }}{% elif d.status == 'soon' %}{{ _('Too soon') }}{% else %}{{ _('Closed') }}{% endif %}</span>
     </li>
     {% endfor %}
   </ul>
-  <a class="btn btn-wine" href="{{ url_for('build') }}">Design your cake</a>
+  <a class="btn btn-wine" href="{{ url_for('build') }}">{{ _('Design your cake') }}</a>
 </section>
 
 <section class="call">
-  <p class="call-script">Something we didn't think of?</p>
-  <p class="call-text">Call or text and we'll make it happen.</p>
+  <p class="call-script">{{ _("Something we didn't think of?") }}</p>
+  <p class="call-text">{{ _("Call or text and we'll make it happen.") }}</p>
   <a class="call-phone" href="tel:{{ brand.phone_href }}">{{ brand.phone }}</a>
 </section>
 {% endblock %}

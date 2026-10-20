@@ -1,41 +1,41 @@
 {% extends "base.html" %}
-{% block title %}Design your cake | {{ brand.name }}{% endblock %}
+{% block title %}{{ _('Design your cake') }} | {{ brand.name }}{% endblock %}
 {% block bodyclass %}page-build{% endblock %}
 {% block topclass %}compact{% endblock %}
 {% block main %}
 <div class="builder" id="builder">
-  <section class="stage" aria-label="Your cake">
+  <section class="stage" aria-label="{{ _('Your cake') }}">
     <div class="stage-tools">
-      <div class="seg" role="group" aria-label="View">
-        <button type="button" class="seg-btn is-on" data-view="outside" aria-pressed="true">Outside</button>
-        <button type="button" class="seg-btn" data-view="inside" aria-pressed="false">Inside</button>
+      <div class="seg" role="group" aria-label="{{ _('View') }}">
+        <button type="button" class="seg-btn is-on" data-view="outside" aria-pressed="true">{{ _('Outside') }}</button>
+        <button type="button" class="seg-btn" data-view="inside" aria-pressed="false">{{ _('Inside') }}</button>
       </div>
-      <button type="button" class="tool-btn" id="share-btn">Share design</button>
+      <button type="button" class="tool-btn" id="share-btn">{{ _('Share design') }}</button>
     </div>
     <div class="stage-art">
       <svg id="cake" class="cake-svg" role="img" aria-labelledby="cake-desc"></svg>
       <div id="cake3d" class="cake3d" aria-hidden="true"></div>
-      <p class="spin-hint" id="spin-hint">Drag to turn your cake</p>
+      <p class="spin-hint" id="spin-hint">{{ _('Drag to turn your cake') }}</p>
       <p id="cake-desc" class="visually-hidden"></p>
     </div>
-    <ul class="stage-layers" id="layers" aria-label="What's inside"></ul>
+    <ul class="stage-layers" id="layers" aria-label="{{ _("What's inside") }}"></ul>
   </section>
 
   <section class="panel">
-    <nav class="steps" aria-label="Steps">
+    <nav class="steps" aria-label="{{ _('Steps') }}">
       <ol id="step-nav"></ol>
     </nav>
     <div id="steps"></div>
   </section>
 
-  <div class="bar" role="region" aria-label="Price and next step">
+  <div class="bar" role="region" aria-label="{{ _('Price and next step') }}">
     <div class="bar-price">
       <span class="bar-total" id="bar-total">$0</span>
-      <span class="bar-meta" id="bar-meta">Serves 0</span>
+      <span class="bar-meta" id="bar-meta"></span>
     </div>
     <div class="bar-actions">
-      <button type="button" class="btn btn-quiet" id="back-btn">Back</button>
-      <button type="button" class="btn btn-wine" id="next-btn">Next</button>
+      <button type="button" class="btn btn-quiet" id="back-btn">{{ _('Back') }}</button>
+      <button type="button" class="btn btn-wine" id="next-btn">{{ _('Next') }}</button>
     </div>
   </div>
 </div>
@@ -46,7 +46,7 @@
 <script>
   window.LC_MENU = {{ menu_json|safe }};
   window.LC_START = {{ start_json|safe }};
-  window.LC_CFG = {depositPct: {{ deposit_pct }}, payments: {{ 'true' if payments_on else 'false' }}, pickup: {{ settings_pickup|tojson }}, phone: {{ brand.phone|tojson }} };
+  window.LC_CFG = {depositPct: {{ deposit_pct }}, payments: {{ 'true' if payments_on else 'false' }}, pickup: {{ settings_pickup|tojson }}, phone: {{ brand.phone|tojson }}, shop: {{ brand.name|tojson }} };
 </script>
 <script src="{{ url_for('static', filename='cake.js') }}?v={{ asset_v }}"></script>
 <script src="{{ url_for('static', filename='builder.js') }}?v={{ asset_v }}"></script>

@@ -33,6 +33,7 @@ import requests
 import catalog
 import schedule
 import store
+from i18n import _
 
 API = "https://api.stripe.com/v1"
 BUSINESS = os.environ.get("BUSINESS_NAME", "LeCreme Bakery")
@@ -105,23 +106,25 @@ def deposit_paid(order_id):
 def create_checkout(order, kind, base_url):
     """Start a Checkout session for the deposit or the balance. Returns (url, error)."""
     if not enabled():
-        return None, "Online payment isn't switched on yet. Please call us to finish your order."
+        return None, _("Online payment isn't switched on yet. Please call us to finish your order.")
     if kind == "deposit":
         amount = order["deposit_cents"]
     else:
         amount = balance_due(order)
     if amount < 50:
-        return None, "There's nothing left to pay on this order."
-    head = catalog.describe(order["design"])[0]
-    when = schedule.label(order["pickup_date"], long=False)
-    item = f"{BUSINESS}: {head}, pickup {when}"
-    item += " (deposit)" if kind == "deposit" else " (balance)"
+        return None, _("There's nothing left to pay on this order.")
+    lang = order.get("lang") or "en"
+    head = catalog.describe(order["design"], lang)[0]
+    when = schedule.label(order["pickup_date"], long=False, lang=lang)
+    item = _("{shop}: {cake}, pickup {when}", lang, shop=BUSINESS, cake=head, when=when)
+    item += " " + (_("(deposit)", lang) if kind == "deposit" else _("(balance)", lang))
     track = f"{base_url}/order/{order['token']}"
     fee = fee_for(amount)
     data = {
         "mode": "payment",
         "success_url": f"{track}?paid={kind}",
         "cancel_url": f"{track}?canceled={kind}",
+        "locale": "es" if lang == "es" else "en",
         "line_items[0][quantity]": "1",
         "line_items[0][price_data][currency]": "usd",
         "line_items[0][price_data][unit_amount]": str(amount),
@@ -146,7 +149,7 @@ def create_checkout(order, kind, base_url):
         data["payment_intent_data[on_behalf_of]"] = acct
     body, err = _stripe("POST", "/checkout/sessions", data)
     if err or not body.get("url"):
-        return None, "We couldn't open the payment page. Please try again in a moment."
+        return None, _("We couldn't open the payment page. Please try again in a moment.")
     conn = store.db()
     try:
         with conn:
@@ -283,13 +286,13 @@ def report(month=None):
     t = {"gross": 0, "fee": 0, "fee_collected": 0, "fee_owed": 0, "net": 0, "owed_to_bakery": 0}
     for r in rows:
         if r["kind"] == "in_person":
-            r["route"] = "In person"
+            r["route"] = _("In person")
             t["fee_owed"] += r["fee_cents"]
         elif r["destination"]:
-            r["route"] = "Stripe, split automatically"
+            r["route"] = _("Stripe, split automatically")
             t["fee_collected"] += r["fee_cents"]
         else:
-            r["route"] = "Stripe, before payouts were connected"
+            r["route"] = _("Stripe, before payouts were connected")
             t["fee_collected"] += r["fee_cents"]
             t["owed_to_bakery"] += r["amount_cents"] - r["fee_cents"]
         r["net_cents"] = r["amount_cents"] - r["fee_cents"]
@@ -303,7 +306,7 @@ def report(month=None):
 def start_onboarding(base_url):
     """Create the bakery's Express account if needed and return a Stripe onboarding link."""
     if not enabled():
-        return None, "Add STRIPE_SECRET_KEY on Railway first."
+        return None, _("Add STRIPE_SECRET_KEY on Railway first.")
     acct = connect_account()
     if not acct:
         body, err = _stripe("POST", "/accounts", {
@@ -347,6 +350,6 @@ def refresh_connect():
 def dashboard_link():
     acct = connect_account()
     if not acct:
-        return None, "Connect Stripe first."
+        return None, _("Connect Stripe first.")
     body, err = _stripe("POST", f"/accounts/{acct}/login_links")
     return (body or {}).get("url"), err

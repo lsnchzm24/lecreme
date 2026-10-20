@@ -15,7 +15,7 @@
   function stamp(root) {
     root.querySelectorAll("time[datetime]").forEach(t => {
       const d = new Date(t.getAttribute("datetime"));
-      if (!isNaN(d)) t.textContent = d.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+      if (!isNaN(d)) t.textContent = d.toLocaleString(window.LC_LOCALE || "en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
     });
   }
   stamp(document);
@@ -26,7 +26,7 @@
     const el = document.getElementById("hold-left");
     const tick = () => {
       const s = Math.max(0, Math.round((until - Date.now()) / 1000));
-      el.textContent = s ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}` : "no longer";
+      el.textContent = s ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}` : window._t("a moment");
       if (s) setTimeout(tick, 1000); else setTimeout(() => location.replace(location.pathname), 1500);
     };
     tick();

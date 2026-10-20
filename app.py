@@ -1,7 +1,8 @@
-"""LeCreme Bakery: design a cake, see it come together, pick a pickup time and pay a deposit.
+"""LeCreme Bakery: design a cake, watch it come together, pick a pickup time and reserve it.
 
 Run locally:   python app.py            (http://localhost:5000)
 On Railway:    gunicorn app:app  (see Procfile). Mount a volume at /data and set DATA_DIR=/data.
+Every page is in English and Spanish (see i18n.py); the visitor switches with the EN/ES button.
 """
 import json
 import logging
@@ -18,10 +19,12 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 import admin
 import catalog
+import i18n
 import mailer
 import payments
 import schedule
 import store
+from i18n import STATUS, _
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("lecreme")
@@ -39,33 +42,24 @@ BRAND = {
 }
 BRAND["phone_href"] = "+1" + re.sub(r"\D", "", BRAND["phone"])[-10:]
 
-STATUS = {
-    "requested": ("Request received", "We'll call to confirm your order and take the deposit."),
-    "pending": ("Waiting for deposit", "Your pickup time is held while you finish paying."),
-    "expired": ("Hold released", "The deposit wasn't completed, so the time was released. You can try again below."),
-    "confirmed": ("Confirmed", "Your date is locked in. We'll start a day or two before pickup."),
-    "baking": ("In the oven", "Your layers are baking right now."),
-    "decorating": ("Being decorated", "Frosting, finishing and the details you picked."),
-    "ready": ("Ready for pickup", "Your cake is boxed and chilled. Come on by."),
-    "picked_up": ("Picked up", "Thank you for celebrating with us."),
-    "cancelled": ("Cancelled", "This order was cancelled. Call us with any questions."),
-}
 TIMELINE = ["confirmed", "baking", "decorating", "ready", "picked_up"]
 IMG_SIG = {b"\xff\xd8\xff": ".jpg", b"\x89PNG": ".png", b"RIFF": ".webp"}
+ASSET_V = str(int(time.time()))
 
 
 @app.context_processor
 def inject():
-    return {"brand": BRAND, "year": datetime.now().year, "money": money, "asset_v": ASSET_V}
-
-
-ASSET_V = str(int(time.time()))
+    lang = i18n.current()
+    here = request.full_path.rstrip("?") if request else "/"
+    return {"brand": BRAND, "year": datetime.now().year, "money": money, "asset_v": ASSET_V, "_": _,
+            "lang": lang, "other_lang": "es" if lang == "en" else "en", "here": here,
+            "js_strings": i18n.browser_table()}
 
 
 @app.template_filter("dparts")
 def dparts(iso):
     d = schedule.parse_date(iso)
-    return {"dow": d.strftime("%a"), "day": d.day, "mon": d.strftime("%b")} if d else {}
+    return i18n.day_parts(d) if d else {}
 
 
 def money(cents):
@@ -77,7 +71,23 @@ def base_url():
     return os.environ.get("PUBLIC_URL", "").rstrip("/") or request.host_url.rstrip("/")
 
 
-admin.configure(app, STATUS=STATUS, money=money, base_url=base_url, notify=lambda *a, **k: notify(*a, **k))
+admin.configure(app, money=money, base_url=base_url, notify=lambda *a, **k: notify(*a, **k))
+
+
+# --------------------------------------------------------------------- language
+@app.get("/lang/<code>")
+def set_lang(code):
+    code = code if code in i18n.LANGS else "en"
+    nxt = request.args.get("next", "/")
+    if not nxt.startswith("/") or nxt.startswith("//") or "\\" in nxt:
+        nxt = "/"
+    resp = redirect(nxt)
+    resp.set_cookie("lang", code, max_age=60 * 60 * 24 * 365, samesite="Lax",
+                    secure=os.environ.get("RAILWAY_ENVIRONMENT") is not None)
+    if admin.signed_in():
+        store.set_setting("admin_lang", code)          # kitchen emails follow the admin's language
+    return resp
+
 
 # ------------------------------------------------------------------ rate limit
 _hits = defaultdict(deque)
@@ -142,18 +152,18 @@ def _order_view(o):
     title, blurb = STATUS.get(st, (st, ""))
     q = o["quote"]
     return {
-        "status": st, "title": title, "blurb": blurb,
-        "timeline": [{"id": s, "label": STATUS[s][0],
+        "status": st, "title": _(title), "blurb": _(blurb),
+        "timeline": [{"id": s, "label": _(STATUS[s][0]),
                       "done": st in TIMELINE and TIMELINE.index(s) <= TIMELINE.index(st)} for s in TIMELINE],
         "when": schedule.label(o["pickup_date"], o["pickup_time"]),
         "summary": catalog.describe(o["design"]),
-        "lines": q["lines"], "servings": q["servings"],
+        "lines": [dict(l, label=catalog.line_label(l)) for l in q["lines"]], "servings": q["servings"],
         "total": o["total_cents"], "paid": paid, "due": max(o["total_cents"] - paid, 0),
         "deposit": o["deposit_cents"],
         "can_pay_deposit": payments.enabled() and st in ("pending", "expired"),
         "can_pay_balance": payments.enabled() and st in TIMELINE[:-1] and o["total_cents"] - paid >= 50,
-        "events": store.get_events(o["id"]),
-        "pickup_address": store.setting("pickup_address"), "pickup_note": store.setting("pickup_note"),
+        "events": [dict(e, message=i18n.event_text(e["message"])) for e in store.get_events(o["id"])],
+        "pickup_address": store.setting("pickup_address"), "pickup_note": _(store.setting("pickup_note")),
         "hold_until": o["hold_until"] if st == "pending" else "",
         "design_json": json.dumps(o["design"]),
     }
@@ -174,7 +184,7 @@ def order_pay(token):
     if not o:
         abort(404)
     if limited("pay", 12, 600):
-        return render_template("order.html", o=o, view=_order_view(o), error="Too many tries. Please wait a few minutes."), 429
+        return render_template("order.html", o=o, view=_order_view(o), error=_("Too many tries. Please wait a few minutes.")), 429
     v = _order_view(o)
     if v["can_pay_deposit"]:
         if v["status"] == "expired":
@@ -200,7 +210,7 @@ def _rehold(o):
         err = schedule.can_book(conn, d, o["pickup_time"], o["units"], o["quote"].get("lead_days", 0))
         if err:
             conn.rollback()
-            return err + " Call us and we'll find you a time."
+            return err + " " + _("Call us and we'll find you a time.")
         hold = (datetime.now(timezone.utc) + timedelta(minutes=schedule.HOLD_MINUTES)).isoformat(timespec="seconds")
         conn.execute("UPDATE orders SET status = 'pending', hold_until = ? WHERE id = ?", (hold, o["id"]))
         conn.commit()
@@ -222,8 +232,8 @@ def order_ics(token):
         "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//LeCreme Bakery//Orders//EN", "BEGIN:VEVENT",
         f"UID:order-{o['id']}@lecreme", f"DTSTAMP:{datetime.now(timezone.utc).strftime(fmt)}",
         f"DTSTART:{start.strftime(fmt)}", f"DTEND:{end.strftime(fmt)}",
-        f"SUMMARY:Pick up cake at {BRAND['name']}", f"LOCATION:{loc}",
-        f"DESCRIPTION:Order #{o['id']}. {base_url()}/order/{o['token']}",
+        "SUMMARY:" + _("Pick up cake at {shop}", shop=BRAND["name"]), f"LOCATION:{loc}",
+        "DESCRIPTION:" + _("Order #{n}", n=o["id"]) + f". {base_url()}/order/{o['token']}",
         "END:VEVENT", "END:VCALENDAR", ""])
     return Response(body, mimetype="text/calendar", headers={"Content-Disposition": "attachment; filename=lecreme-pickup.ics"})
 
@@ -260,7 +270,7 @@ def api_calendar():
 def api_slots():
     d = schedule.parse_date(request.args.get("date", ""))
     if not d:
-        return jsonify({"error": "Pick a date."}), 400
+        return jsonify({"error": _("Pick a date.")}), 400
     info, times = schedule.slots(d, request.args.get("units", type=int) or 1, request.args.get("extra", type=int) or 0)
     for t in times:
         t["label"] = schedule.time_label(t["time"])
@@ -270,28 +280,28 @@ def api_slots():
 @app.post("/api/order")
 def api_order():
     if limited("order", 8, 600):
-        return jsonify({"error": "Too many orders from this connection. Please wait a few minutes or call us."}), 429
+        return jsonify({"error": _("Too many orders from this connection. Please wait a few minutes or call us.")}), 429
     f = request.form
     try:
         design = catalog.clean(json.loads(f.get("design") or "{}"))
     except (ValueError, json.JSONDecodeError) as e:
-        return jsonify({"error": str(e) or "The design didn't come through."}), 400
+        return jsonify({"error": str(e) or _("The design didn't come through. Please try again.")}), 400
     name = re.sub(r"\s+", " ", f.get("name", "")).strip()[:80]
     phone = re.sub(r"[^\d+()\- ]", "", f.get("phone", "")).strip()[:24]
     email = f.get("email", "").strip()[:120]
     if len(name) < 2:
-        return jsonify({"error": "Please add your name.", "field": "name"}), 400
+        return jsonify({"error": _("Please add your name."), "field": "name"}), 400
     if len(re.sub(r"\D", "", phone)) < 10:
-        return jsonify({"error": "Please add a phone number we can text about pickup.", "field": "phone"}), 400
+        return jsonify({"error": _("Please add a phone number we can text about pickup."), "field": "phone"}), 400
     if email and not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
-        return jsonify({"error": "That email doesn't look right.", "field": "email"}), 400
+        return jsonify({"error": _("That email doesn't look right."), "field": "email"}), 400
     d = schedule.parse_date(f.get("date", ""))
     t = f.get("time", "")[:5]
     if not d or not t:
-        return jsonify({"error": "Please pick a pickup date and time."}), 400
+        return jsonify({"error": _("Please pick a pickup date and time.")}), 400
     photo = _save_photo(request.files.get("photo"))
     if photo is None:
-        return jsonify({"error": "The inspiration photo needs to be a JPG, PNG or WebP under 10 MB."}), 400
+        return jsonify({"error": _("The inspiration photo needs to be a JPG, PNG or WebP under 10 MB.")}), 400
     q = catalog.quote(design)
     dep_pct = store.setting_int("deposit_pct", 50, 0, 100)
     online = payments.enabled()
@@ -309,7 +319,7 @@ def api_order():
         oid = store.create_order(conn, status="pending" if online else "requested", name=name, phone=phone, email=email,
                                  occasion=f.get("occasion", "").strip()[:60], design=design, quote=q,
                                  total_cents=q["total"], deposit_cents=deposit, pickup_date=d.isoformat(), pickup_time=t,
-                                 units=q["units"], hold_until=hold if online else "", photo=photo)
+                                 units=q["units"], hold_until=hold if online else "", photo=photo, lang=i18n.current())
         store.add_event(oid, "created", "Order placed. Thank you!", conn=conn)
         conn.commit()
     finally:
@@ -364,26 +374,41 @@ def stripe_webhook():
 
 # ------------------------------------------------------------------- emails
 def notify(order_id, what):
+    """Customer emails go out in the language they ordered in; kitchen emails in the admin's."""
     o = store.get_order(order_id)
     if not o:
         return
+    cl = o.get("lang") or "en"
+    kl = store.setting("admin_lang") or "en"
     link = f"{base_url()}/order/{o['token']}"
-    when = schedule.label(o["pickup_date"], o["pickup_time"])
-    lines = "\n".join("  " + x for x in catalog.describe(o["design"]))
+    first = o["name"].split()[0]
     if what in ("deposit", "requested"):
-        verb = "is confirmed" if what == "deposit" else "request is in"
         if o["email"]:
-            mailer.send_async(o["email"], f"Your {BRAND['name']} cake {verb}",
-                              f"Hi {o['name'].split()[0]},\n\nYour cake {verb}. Pickup: {when}.\n\n{lines}\n\n"
-                              f"Total {money(o['total_cents'])}. Track it any time: {link}\n\n"
-                              f"Questions? Call or text {BRAND['phone']}.\n\n{BRAND['name']}")
-        mailer.send_async(mailer.bakery_inbox(), f"New cake order #{o['id']} for {when}",
-                          f"{o['name']} ({o['phone']}{', ' + o['email'] if o['email'] else ''})\nPickup {when}\n\n{lines}\n\n"
-                          f"Total {money(o['total_cents'])}. Admin: {base_url()}/admin", reply_to=o["email"])
+            lines = "\n".join("  " + x for x in catalog.describe(o["design"], cl))
+            subject = (_("Your {shop} cake is confirmed", cl, shop=BRAND["name"]) if what == "deposit"
+                       else _("We got your {shop} cake request", cl, shop=BRAND["name"]))
+            body = "\n\n".join([
+                _("Hi {name},", cl, name=first),
+                (_("Your cake is confirmed. Pickup: {when}.", cl, when=schedule.label(o["pickup_date"], o["pickup_time"], lang=cl))
+                 if what == "deposit" else
+                 _("We got your cake request for {when}. We'll call you soon to confirm.", cl, when=schedule.label(o["pickup_date"], o["pickup_time"], lang=cl))),
+                lines,
+                _("Total {total}. Follow your cake any time: {link}", cl, total=money(o["total_cents"]), link=link),
+                _("Questions? Call or text {phone}.", cl, phone=BRAND["phone"]),
+                BRAND["name"]])
+            mailer.send_async(o["email"], subject, body)
+        when_k = schedule.label(o["pickup_date"], o["pickup_time"], lang=kl)
+        lines_k = "\n".join("  " + x for x in catalog.describe(o["design"], kl))
+        mailer.send_async(mailer.bakery_inbox(), _("New cake order #{n} for {when}", kl, n=o["id"], when=when_k),
+                          f"{o['name']} ({o['phone']}{', ' + o['email'] if o['email'] else ''})\n"
+                          + _("Pickup {when}", kl, when=when_k) + f"\n\n{lines_k}\n\n"
+                          + _("Total {total}. Admin: {link}", kl, total=money(o["total_cents"]), link=f"{base_url()}/admin"),
+                          reply_to=o["email"])
     elif what == "ready" and o["email"]:
-        mailer.send_async(o["email"], f"Your cake is ready at {BRAND['name']}",
-                          f"Hi {o['name'].split()[0]},\n\nYour cake is ready for pickup ({when}).\n"
-                          f"{store.setting('pickup_address')}\n\nOrder: {link}\n\n{BRAND['name']}")
+        mailer.send_async(o["email"], _("Your cake is ready at {shop}", cl, shop=BRAND["name"]),
+                          "\n\n".join([_("Hi {name},", cl, name=first),
+                                       _("Your cake is ready for pickup ({when}).", cl, when=schedule.label(o["pickup_date"], o["pickup_time"], lang=cl)),
+                                       store.setting("pickup_address"), _("Your order: {link}", cl, link=link), BRAND["name"]]))
 
 
 @app.errorhandler(404)
@@ -393,7 +418,7 @@ def not_found(e):
 
 @app.errorhandler(413)
 def too_big(e):
-    return jsonify({"error": "That photo is too large. Please use one under 10 MB."}), 413
+    return jsonify({"error": _("That photo is too large. Please use one under 10 MB.")}), 413
 
 
 @app.get("/healthz")

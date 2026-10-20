@@ -72,7 +72,7 @@ p { margin: 0; }
 .top.on-dark { position: absolute; inset: 0 0 auto; color: var(--sugar); }
 .top.compact { background: var(--sugar); border-bottom: 1px solid var(--line); }
 .lockup { display: inline-flex; flex-direction: column; align-items: center; line-height: 1; text-decoration: none; }
-.lockup-script { font-family: var(--script); font-size: 2.05rem; line-height: .9; }
+.lockup-script { font-family: var(--script); font-size: 2.05rem; line-height: .9; white-space: nowrap; }
 .lockup-sub { font-family: var(--display); font-weight: 600; font-stretch: 100%; letter-spacing: .46em; font-size: .56rem; text-transform: uppercase; margin-top: .15rem; padding-left: .42em; }
 .lockup-lg .lockup-script { font-size: 3rem; }
 .lockup-lg .lockup-sub { font-size: .72rem; }
@@ -531,3 +531,25 @@ p { margin: 0; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
 }
+
+/* --------------------------------------------------------------- language */
+.lang-btn { display: inline-flex; align-items: center; flex: none; padding: 3px; border-radius: 999px; border: 1px solid currentColor; text-decoration: none;
+  font-size: .74rem; font-weight: 700; letter-spacing: .02em; line-height: 1; opacity: .9; margin-left: .6rem; }
+.lang-btn:hover { opacity: 1; }
+.lang-opt { padding: .32rem .5rem; border-radius: 999px; }
+.lang-opt.is-on { background: currentColor; }
+.lang-opt.is-on { color: inherit; }
+.top .lang-opt.is-on { background: var(--wine); color: var(--sugar); }
+.top.on-dark .lang-opt.is-on { background: var(--sugar); color: var(--wine); }
+.login-top { justify-content: flex-end; background: transparent; border: 0; }
+.admin-right { align-items: center; }
+@media (max-width: 960px) { .top-cta { margin-left: auto; } }
+@media (max-width: 480px) {
+  .top { gap: .6rem; }
+  .lockup-script { font-size: 1.7rem; }
+  .lockup-sub { font-size: .5rem; }
+  .top-cta { padding-inline: .8rem; font-size: .84rem; min-height: 38px; }
+  .lang-btn { margin-left: 0; }
+  .lang-opt { padding: .3rem .42rem; }
+}
+@media (max-width: 360px) { .top-cta { display: none; } .lang-btn { margin-left: auto; } }

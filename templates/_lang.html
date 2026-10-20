@@ -1,0 +1,4 @@
+<a class="lang-btn" href="{{ url_for('set_lang', code=other_lang, next=here) }}" hreflang="{{ other_lang }}" lang="{{ other_lang }}"
+   aria-label="{{ 'Ver en español' if other_lang == 'es' else 'View in English' }}" title="{{ 'Ver en español' if other_lang == 'es' else 'View in English' }}">
+  <span class="lang-opt{{ ' is-on' if lang == 'en' }}">EN</span><span class="lang-opt{{ ' is-on' if lang == 'es' }}">ES</span>
+</a>

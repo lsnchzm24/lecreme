@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% block title %}Not found | {{ brand.name }}{% endblock %}
+{% block title %}{{ _('Not found') }} | {{ brand.name }}{% endblock %}
 {% block main %}
 <section class="empty">
-  <p class="empty-script">Oh, crumbs.</p>
-  <h1>That page isn't here.</h1>
-  <p>The link may be mistyped, or the order was removed. If you're looking for an order, call or text {{ brand.phone }}.</p>
-  <a class="btn btn-wine" href="{{ url_for('home') }}">Back to the bakery</a>
+  <p class="empty-script">{{ _('Oh, crumbs.') }}</p>
+  <h1>{{ _("That page isn't here.") }}</h1>
+  <p>{{ _("The link may be mistyped, or the order was removed. If you're looking for an order, call or text {phone}.", phone=brand.phone) }}</p>
+  <a class="btn btn-wine" href="{{ url_for('home') }}">{{ _('Back to the bakery') }}</a>
 </section>
 {% endblock %}

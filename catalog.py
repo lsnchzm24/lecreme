@@ -9,6 +9,7 @@ import json
 import re
 
 import store
+from i18n import _, lowfirst
 
 # --------------------------------------------------------------------------- the menu
 # Every option has an id, a label, a price in cents and (where it matters) colors for the drawing.
@@ -164,8 +165,9 @@ def _overrides():
     return prices, hidden
 
 
-def menu(include_hidden=False):
-    """The menu with the owner's prices applied (and hidden options removed unless asked)."""
+def menu(include_hidden=False, lang=None):
+    """The menu with the owner's prices applied, in the visitor's language
+    (hidden options removed unless asked)."""
     prices, hidden = _overrides()
     out = {}
     for group, items in GROUPS.items():
@@ -173,6 +175,10 @@ def menu(include_hidden=False):
         for it in items:
             key = f"{group}.{it['id']}"
             row = dict(it, key=key, hidden=key in hidden)
+            if group != "sizes":
+                row["label"] = _(it["label"], lang)
+            if it.get("note"):
+                row["note"] = _(it["note"], lang)
             if group in PRICED and key in prices:
                 try:
                     row["price"] = max(0, int(prices[key]))
@@ -181,14 +187,15 @@ def menu(include_hidden=False):
             if include_hidden or not row["hidden"]:
                 rows.append(row)
         out[group] = rows
-    out["custom_color_price"] = int(prices.get("custom_color", CUSTOM_COLOR_PRICE)) if str(prices.get("custom_color", "")).isdigit() else CUSTOM_COLOR_PRICE
-    out["signatures"] = SIGNATURES
+    cc = str(prices.get("custom_color", ""))
+    out["custom_color_price"] = int(cc) if cc.isdigit() else CUSTOM_COLOR_PRICE
+    out["signatures"] = [dict(s, blurb=_(s["blurb"], lang)) for s in SIGNATURES]
     out["max_tiers"] = MAX_TIERS
     return out
 
 
 def tier_sizes(bottom, tiers):
-    """Sizes from the bottom up: an 10" base with 3 tiers is 10, 8, 6."""
+    """Sizes from the bottom up: a 10" base with 3 tiers is 10, 8, 6."""
     b = int(bottom)
     return [str(b - 2 * i) for i in range(tiers)]
 
@@ -197,17 +204,13 @@ def tier_sizes(bottom, tiers):
 def clean(raw):
     """Turn whatever the browser sent into a valid design, or raise ValueError with a reason."""
     if not isinstance(raw, dict):
-        raise ValueError("The design didn't come through. Please try again.")
+        raise ValueError(_("The design didn't come through. Please try again."))
     m = menu()
     ids = {g: {o["id"]: o for o in m[g]} for g in GROUPS}
 
-    def pick(group, value, default=None):
+    def pick(group, value, default):
         v = str(value or "")
-        if v in ids[group]:
-            return v
-        if default is not None:
-            return default
-        raise ValueError(f"Please choose a {group[:-1]}.")
+        return v if v in ids[group] else default
 
     d = {"shape": pick("shapes", raw.get("shape"), "round")}
     if d["shape"] == "sheet":
@@ -223,7 +226,7 @@ def clean(raw):
         d["size"] = pick("sizes", raw.get("size"), "8")
         sizes = tier_sizes(d["size"], d["tiers"])
         if any(s not in ids["sizes"] for s in sizes):
-            raise ValueError(f'A {d["tiers"]}-tier cake needs a bigger base. Pick a larger bottom tier.')
+            raise ValueError(_("A {n}-tier cake needs a bigger base. Pick a larger bottom tier.", n=d["tiers"]))
     d["sizes"] = sizes
     fl = list(raw.get("flavors") or [])
     fi = list(raw.get("fillings") or [])
@@ -245,9 +248,9 @@ def clean(raw):
     num = re.sub(r"[^0-9]", "", str(raw.get("number") or ""))[:3]
     d["number"] = num if d["topper"] == "number" else ""
     if d["topper"] == "number" and not num:
-        raise ValueError("Add the number for the candles, or choose a different topper.")
+        raise ValueError(_("Add the number for the candles, or choose a different topper."))
     if d["topper"] == "script" and not d["topper_text"]:
-        raise ValueError("Write the words for the topper, or choose a different topper.")
+        raise ValueError(_("Write the words for the topper, or choose a different topper."))
     d["message"] = _text(raw.get("message"))
     d["extras"] = sorted({x for x in (raw.get("extras") or []) if str(x) in ids["extras"]})
     d["notes"] = str(raw.get("notes") or "").strip()[:600]
@@ -259,19 +262,26 @@ def _text(v):
 
 
 # --------------------------------------------------------------------------- pricing
-def quote(d):
-    """Line items and total for a cleaned design. Returns dict with cents."""
+SHAPE_WORD = {"round": "round", "square": "square"}
+
+
+def quote(d, lang=None):
+    """Line items and total for a cleaned design (cents). Each line keeps what it is
+    (kind, ref, tier) so it can be shown in any language later; "label" is in `lang`."""
     m = menu(include_hidden=True)
     by = {g: {o["id"]: o for o in m[g]} for g in GROUPS}
     lines = []
+    multi = d["tiers"] > 1
 
-    def add(label, cents, qty=1):
+    def add(kind, ref, cents, qty=1, tier=None):
         if cents:
-            lines.append({"label": label, "cents": cents * qty, "qty": qty})
+            line = {"kind": kind, "ref": ref, "cents": cents * qty, "qty": qty, "tier": tier, "multi": multi}
+            line["label"] = line_label(line, lang)
+            lines.append(line)
 
     if d["shape"] == "sheet":
         s = by["sheets"][d["size"]]
-        add(s["label"], s["price"])
+        add("sheet", f"sheets.{d['size']}", s["price"])
         servings = s["servings"]
     else:
         servings = 0
@@ -279,30 +289,55 @@ def quote(d):
         for i, size in enumerate(d["sizes"]):
             s = by["sizes"][size]
             servings += s["servings"]
-            base = s["price"] + s["price"] * pct // 100
-            add(f'{"Tier " + str(i + 1) + ", " if d["tiers"] > 1 else ""}{s["label"]} {d["shape"]}', base)
+            add("size", f"{size}|{d['shape']}", s["price"] + s["price"] * pct // 100, tier=i + 1)
     for i in range(d["tiers"]):
-        tier = f" (tier {i + 1})" if d["tiers"] > 1 else ""
         f = by["flavors"][d["flavors"][i]]
-        add(f["label"] + tier, f["price"])
+        add("item", f"flavors.{f['id']}", f["price"], tier=i + 1)
         fi = by["fillings"][d["fillings"][i]]
-        add(fi["label"] + tier, fi["price"])
-    fin = by["finishes"][d["finish"]]
-    add(fin["label"], fin["price"], d["tiers"])
+        add("item", f"fillings.{fi['id']}", fi["price"], tier=i + 1)
+    add("item", f"finishes.{d['finish']}", by["finishes"][d["finish"]]["price"], d["tiers"])
     if d["color"] == "custom":
-        add("Custom color match", m["custom_color_price"])
-    dr = by["drips"][d["drip"]]
-    add(f'{dr["label"]} drip', dr["price"], d["tiers"] if d["drip"] != "none" else 1)
-    bo = by["borders"][d["border"]]
-    add(f'{bo["label"]} border', bo["price"], d["tiers"])
+        add("custom_color", "", m["custom_color_price"])
+    if d["drip"] != "none":
+        add("drip", f"drips.{d['drip']}", by["drips"][d["drip"]]["price"], d["tiers"])
+    if d["border"] != "none":
+        add("border", f"borders.{d['border']}", by["borders"][d["border"]]["price"], d["tiers"])
     for x in d["decor"]:
-        add(by["decor"][x]["label"], by["decor"][x]["price"])
-    tp = by["toppers"][d["topper"]]
-    add(tp["label"], tp["price"])
+        add("item", f"decor.{x}", by["decor"][x]["price"])
+    add("item", f"toppers.{d['topper']}", by["toppers"][d["topper"]]["price"])
     for x in d["extras"]:
-        add(by["extras"][x]["label"], by["extras"][x]["price"], d["tiers"])
+        add("item", f"extras.{x}", by["extras"][x]["price"], d["tiers"])
     total = sum(l["cents"] for l in lines)
     return {"lines": lines, "total": total, "servings": servings, "units": units(d), "lead_days": lead_days(d)}
+
+
+def _label_of(ref, lang):
+    group, _sep, oid = ref.partition(".")
+    item = next((o for o in GROUPS.get(group, []) if o["id"] == oid), None)
+    return _(item["label"], lang) if item else oid
+
+
+def line_label(line, lang=None):
+    """A receipt line in any language. Older orders without "kind" keep their saved label."""
+    kind, ref, tier = line.get("kind"), line.get("ref", ""), line.get("tier")
+    if not kind:
+        return line.get("label", "")
+    if kind == "sheet":
+        return _label_of(ref, lang)
+    if kind == "size":
+        size, _sep, shape = ref.partition("|")
+        text = _('{size}" ' + SHAPE_WORD.get(shape, shape), lang, size=size)
+        return _("Tier {n}, {x}", lang, n=tier, x=text) if line.get("multi") else text
+    if kind == "custom_color":
+        return _("Custom color match", lang)
+    if kind == "drip":
+        return _("{x} drip", lang, x=lowfirst(_label_of(ref, lang), lang))
+    if kind == "border":
+        return _("{x} border", lang, x=lowfirst(_label_of(ref, lang), lang))
+    text = _label_of(ref, lang)
+    if tier and line.get("multi"):
+        return _("{x} (tier {n})", lang, x=text, n=tier)
+    return text
 
 
 def units(d):
@@ -326,33 +361,36 @@ def lead_days(d):
     return extra
 
 
-def describe(d):
+def describe(d, lang=None):
     """A plain-language summary for emails and the kitchen ticket."""
-    m = menu(include_hidden=True)
+    m = menu(include_hidden=True, lang=lang)
     by = {g: {o["id"]: o for o in m[g]} for g in GROUPS}
+    low = lambda s: s[:1].lower() + s[1:] if s and not s[:2].isupper() else s     # mid-sentence, both languages
     if d["shape"] == "sheet":
         head = by["sheets"][d["size"]]["label"]
     else:
-        head = f'{d["tiers"]}-tier {d["shape"]} ({" / ".join(s + chr(34) for s in d["sizes"])})'
+        head = _("{n}-tier {shape} ({sizes})" if d["tiers"] > 1 else "1-tier {shape} ({sizes})", lang, n=d["tiers"], shape=_(SHAPE_WORD[d["shape"]], lang),
+                 sizes=" / ".join(s + chr(34) for s in d["sizes"]))
     rows = [head]
     for i in range(d["tiers"]):
-        rows.append(f'{"Tier " + str(i + 1) + ": " if d["tiers"] > 1 else ""}{by["flavors"][d["flavors"][i]]["label"]} with {by["fillings"][d["fillings"][i]]["label"].lower()}')
+        line = _("{a} with {b}", lang, a=by["flavors"][d["flavors"][i]]["label"], b=low(by["fillings"][d["fillings"][i]]["label"]))
+        rows.append(_("Tier {n}: {x}", lang, n=i + 1, x=line) if d["tiers"] > 1 else line)
     color = d["custom_hex"] if d["color"] == "custom" else by["colors"][d["color"]]["label"]
-    rows.append(f'{by["finishes"][d["finish"]]["label"]}, {color}')
+    rows.append(f'{by["finishes"][d["finish"]]["label"]}, {low(color)}')
     if d["drip"] != "none":
-        rows.append(f'{by["drips"][d["drip"]]["label"]} drip')
+        rows.append(_("{x} drip", lang, x=lowfirst(by["drips"][d["drip"]]["label"], lang)))
     if d["border"] != "none":
-        rows.append(f'{by["borders"][d["border"]]["label"]} border')
+        rows.append(_("{x} border", lang, x=lowfirst(by["borders"][d["border"]]["label"], lang)))
     if d["decor"]:
-        rows.append("Decor: " + ", ".join(by["decor"][x]["label"].lower() for x in d["decor"]))
+        rows.append(_("Decor: {x}", lang, x=", ".join(low(by["decor"][x]["label"]) for x in d["decor"])))
     if d["topper"] == "script":
-        rows.append(f'Script topper: "{d["topper_text"]}"')
+        rows.append(_('Script topper: "{x}"', lang, x=d["topper_text"]))
     elif d["topper"] == "number":
-        rows.append(f'Number candles: {d["number"]}')
+        rows.append(_("Number candles: {x}", lang, x=d["number"]))
     if d["message"]:
-        rows.append(f'Piped message: "{d["message"]}"')
+        rows.append(_('Piped message: "{x}"', lang, x=d["message"]))
     if d["extras"]:
         rows.append(", ".join(by["extras"][x]["label"] for x in d["extras"]))
     if d.get("notes"):
-        rows.append(f'Notes: {d["notes"]}')
+        rows.append(_("Notes: {x}", lang, x=d["notes"]))
     return rows

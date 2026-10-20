@@ -10,15 +10,16 @@
   if (!svg) return;
   const base = { shape: "round", tiers: 1, size: "10", flavors: ["vanilla", "redvelvet"], fillings: ["strawberry", "creamcheese"],
     finish: "naked", color: "cream", drip: "none", border: "none", decor: [], topper: "none" };
+  const _t = window._t;
   const steps = [
-    [{}, "Vanilla bean sponge, strawberry preserves"],
-    [{ tiers: 2 }, "A red velvet tier on top"],
-    [{ finish: "smooth" }, "Satin buttercream"],
-    [{ color: "blush" }, "Tinted blush"],
-    [{ drip: "gold" }, "A gold drip"],
-    [{ border: "pearls" }, "Pearl beads"],
-    [{ decor: ["flowers", "berries"] }, "Fresh flowers and berries"],
-    [{ topper: "script", topper_text: "Celebrate" }, "Your words on top"],
+    [{}, _t("Vanilla bean sponge, strawberry preserves")],
+    [{ tiers: 2 }, _t("A red velvet tier on top")],
+    [{ finish: "smooth" }, _t("Satin buttercream")],
+    [{ color: "blush" }, _t("Tinted blush")],
+    [{ drip: "gold" }, _t("A gold drip")],
+    [{ border: "pearls" }, _t("Pearl beads")],
+    [{ decor: ["flowers", "berries"] }, _t("Fresh flowers and berries")],
+    [{ topper: "script", topper_text: _t("Celebrate") }, _t("Your words on top")],
   ];
   const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   let d = Object.assign({}, base), viewer = null;
@@ -43,14 +44,14 @@
   if (reduce) {
     steps.forEach(s => Object.assign(d, s[0]));
     show();
-    cap.textContent = "Every detail, your choice";
+    cap.textContent = _t("Every detail, your choice");
     return;
   }
   let i = 0;
   if (!viewer) LCake.render(svg, d, M, { animateFirst: true, stagger: 60 });
   function next() {
     i += 1;
-    if (i >= steps.length) { setTimeout(() => { cap.textContent = "Every detail, your choice"; }, 1400); return; }
+    if (i >= steps.length) { setTimeout(() => { cap.textContent = _t("Every detail, your choice"); }, 1400); return; }
     Object.assign(d, steps[i][0]);
     show();
     cap.textContent = steps[i][1];

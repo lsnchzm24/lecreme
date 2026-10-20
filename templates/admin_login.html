@@ -1,15 +1,15 @@
 {% extends "base.html" %}
-{% block title %}Sign in | {{ brand.name }}{% endblock %}
+{% block title %}{{ _('Sign in') }} | {{ brand.name }}{% endblock %}
 {% block head %}<meta name="robots" content="noindex">{% endblock %}
-{% block header %}{% endblock %}
+{% block header %}<header class="top compact login-top">{% include "_lang.html" %}</header>{% endblock %}
 {% block footer %}{% endblock %}
 {% block bodyclass %}page-login{% endblock %}
 {% block main %}
 <form class="login" method="post">
-  <div class="lockup lockup-lg"><span class="lockup-script">Le Créme</span><span class="lockup-sub">Bakery</span></div>
-  <h1>Kitchen sign in</h1>
+  <div class="lockup lockup-lg"><span class="lockup-script">Le Créme</span><span class="lockup-sub">{{ _('Bakery') }}</span></div>
+  <h1>{{ _('Kitchen sign in') }}</h1>
   {% if error %}<p class="alert" role="alert">{{ error }}</p>{% endif %}
-  <label class="field"><span>Password</span><input type="password" name="password" autocomplete="current-password" autofocus required></label>
-  <button class="btn btn-gilt">Sign in</button>
+  <label class="field"><span>{{ _('Password') }}</span><input type="password" name="password" autocomplete="current-password" autofocus required></label>
+  <button class="btn btn-gilt">{{ _('Sign in') }}</button>
 </form>
 {% endblock %}
