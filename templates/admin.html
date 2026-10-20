@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Kitchen | {{ brand.name }}{% endblock %}
+{% block head %}<meta name="robots" content="noindex">{% endblock %}
+{% block bodyclass %}page-admin{% endblock %}
+{% block header %}
+<header class="top compact admin-top">
+  <a class="lockup" href="{{ url_for('admin.home') }}"><span class="lockup-script">Le Créme</span><span class="lockup-sub">Kitchen</span></a>
+  <nav class="admin-tabs" role="tablist" aria-label="Sections">
+    <button role="tab" data-tab="orders" class="is-on">Orders</button>
+    <button role="tab" data-tab="calendar">Calendar</button>
+    <button role="tab" data-tab="menu">Menu</button>
+    <button role="tab" data-tab="payments">Payments</button>
+    <button role="tab" data-tab="settings">Settings</button>
+  </nav>
+  <div class="admin-right"><a href="{{ url_for('home') }}" target="_blank" rel="noopener">View site</a><a href="{{ url_for('admin.logout') }}">Sign out</a></div>
+</header>
+{% endblock %}
+{% block footer %}{% endblock %}
+{% block main %}
+<div class="admin">
+  {% if not stripe_on %}<p class="banner">Online payments are off. Add STRIPE_SECRET_KEY on Railway; until then orders come in as requests you confirm by phone.</p>
+  {% elif test_mode %}<p class="banner banner-soft">Stripe is in test mode. Use card 4242 4242 4242 4242 to try a checkout.</p>{% endif %}
+  <section data-pane="orders">
+    <div class="pane-head">
+      <h1>Orders</h1>
+      <div class="seg" role="group" aria-label="Which orders">
+        <button class="seg-btn is-on" data-scope="upcoming">Upcoming</button>
+        <button class="seg-btn" data-scope="past">Past</button>
+        <button class="seg-btn" data-scope="all">All</button>
+      </div>
+    </div>
+    <div id="orders" class="orders"></div>
+  </section>
+  <section data-pane="calendar" hidden>
+    <div class="pane-head">
+      <h1>Calendar</h1>
+      <div class="cal-head inline">
+        <button class="cal-nav" data-month="-1" aria-label="Previous month">‹</button>
+        <h2 class="cal-title" id="m-title"></h2>
+        <button class="cal-nav" data-month="1" aria-label="Next month">›</button>
+      </div>
+    </div>
+    <p class="muted">Each day shows kitchen capacity used. Tap a day to close it or change how much it can take.</p>
+    <div class="acal" id="acal"></div>
+    <div id="day-panel"></div>
+  </section>
+  <section data-pane="menu" hidden>
+    <div class="pane-head"><h1>Menu and prices</h1><button class="btn btn-wine btn-sm" id="save-menu">Save menu</button></div>
+    <p class="muted">Prices are what the customer pays for each choice. Hidden choices disappear from the designer.</p>
+    <div id="menu-edit"></div>
+  </section>
+  <section data-pane="payments" hidden>
+    <div class="pane-head"><h1>Payments</h1><select id="pay-month" aria-label="Month"></select></div>
+    <div id="pay"></div>
+  </section>
+  <section data-pane="settings" hidden>
+    <div class="pane-head"><h1>Settings</h1><button class="btn btn-wine btn-sm" id="save-settings">Save settings</button></div>
+    <div id="settings"></div>
+    <div class="o-card">
+      <h2>Order emails</h2>
+      {% if mail.provider %}<p>Sending with {{ mail.provider }}. New-order alerts go to {{ mail.inbox or "nobody yet (set ORDERS_INBOX)" }}.</p>
+      {% else %}<p class="muted">Not set up. Add RESEND_API_KEY, RESEND_FROM and ORDERS_INBOX on Railway to email customers and the kitchen.</p>{% endif %}
+    </div>
+  </section>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+{% endblock %}
+{% block scripts %}
+<script>window.LC_MENU = {{ menu_json|safe }}; window.LC_FEE = {{ fee_pct }};</script>
+<script src="{{ url_for('static', filename='cake.js') }}?v={{ asset_v }}"></script>
+<script src="{{ url_for('static', filename='admin.js') }}?v={{ asset_v }}"></script>
+{% endblock %}

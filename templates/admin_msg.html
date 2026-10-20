@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} | {{ brand.name }}{% endblock %}
+{% block head %}<meta name="robots" content="noindex">{% endblock %}
+{% block footer %}{% endblock %}
+{% block main %}
+<section class="empty">
+  <h1>{{ title }}</h1>
+  <p>{{ message }}</p>
+  <a class="btn btn-wine" href="{{ url_for('admin.home') }}#payments">Back to payments</a>
+</section>
+{% endblock %}

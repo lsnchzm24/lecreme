@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Order #{{ o.id }} | {{ brand.name }}{% endblock %}
+{% block bodyclass %}page-order{% endblock %}
+{% block head %}<meta name="robots" content="noindex">{% endblock %}
+{% block main %}
+<div class="order">
+  <section class="order-hero">
+    <div class="order-art"><svg id="order-cake" class="cake-svg" role="img" aria-label="Your cake"></svg></div>
+    <div class="order-head">
+      <p class="order-no">Order #{{ o.id }} for {{ o.name.split()[0] }}</p>
+      <h1 id="o-title">{{ view.title }}</h1>
+      <p id="o-blurb" class="order-blurb">{{ view.blurb }}</p>
+      {% if error %}<p class="alert" role="alert">{{ error }}</p>{% endif %}
+      {% if request.args.get('canceled') and view.status in ('pending', 'expired') %}
+      <p class="alert alert-soft" role="status">Payment wasn't finished. {% if view.status == 'pending' %}Your time is still held for a few more minutes.{% endif %}</p>
+      {% endif %}
+      {% if view.hold_until %}<p class="hold" data-until="{{ view.hold_until }}">Held for you for <b id="hold-left">a few minutes</b></p>{% endif %}
+      <div class="order-actions">
+        {% if view.can_pay_deposit %}
+        <form method="post" action="{{ url_for('order_pay', token=o.token) }}"><button class="btn btn-gilt">Pay {{ money(view.deposit) }} deposit</button></form>
+        {% elif view.can_pay_balance %}
+        <form method="post" action="{{ url_for('order_pay', token=o.token) }}"><button class="btn btn-gilt">Pay {{ money(view.due) }} balance</button></form>
+        {% endif %}
+        <a class="btn btn-quiet" href="{{ url_for('order_ics', token=o.token) }}">Add pickup to calendar</a>
+      </div>
+    </div>
+  </section>
+
+  {% if view.status in ('confirmed','baking','decorating','ready','picked_up') %}
+  <ol class="track" id="track" aria-label="Order progress">
+    {% for t in view.timeline %}<li class="{{ 'is-done' if t.done }}"><span class="track-dot" aria-hidden="true"></span><span>{{ t.label }}</span></li>{% endfor %}
+  </ol>
+  {% endif %}
+
+  <div class="order-grid">
+    <section class="o-card">
+      <h2>Pickup</h2>
+      <p class="o-big">{{ view.when }}</p>
+      {% if view.pickup_address %}<p>{{ view.pickup_address }}</p>{% endif %}
+      {% if view.pickup_note %}<p class="muted">{{ view.pickup_note }}</p>{% endif %}
+      <p class="muted">Questions or changes? <a href="tel:{{ brand.phone_href }}">Call</a> or <a href="sms:{{ brand.phone_href }}">text</a> {{ brand.phone }}.</p>
+    </section>
+    <section class="o-card">
+      <h2>Your cake</h2>
+      <ul class="o-list">{% for line in view.summary %}<li>{{ line }}</li>{% endfor %}</ul>
+      <p class="muted">Serves about {{ view.servings }}</p>
+    </section>
+    <section class="o-card">
+      <h2>Payment</h2>
+      <ul class="receipt-lines">{% for l in view.lines %}<li><span>{{ l.label }}{% if l.qty > 1 %} <small>× {{ l.qty }}</small>{% endif %}</span><span>{{ money(l.cents) }}</span></li>{% endfor %}</ul>
+      <div class="receipt-total"><span>Total</span><span>{{ money(view.total) }}</span></div>
+      <div class="receipt-total sub"><span>Paid</span><span id="o-paid">{{ money(view.paid) }}</span></div>
+      <div class="receipt-total sub"><span>Balance</span><span id="o-due">{{ money(view.due) }}</span></div>
+    </section>
+    <section class="o-card">
+      <h2>Updates</h2>
+      <ul class="feed" id="feed">
+        {% for e in view.events|reverse %}<li><time datetime="{{ e.at }}">{{ e.at }}</time><span>{{ e.message }}</span></li>{% endfor %}
+      </ul>
+    </section>
+  </div>
+  <p class="order-foot">Keep this page. It's your order link and updates on its own.</p>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>window.LC_ORDER = {token: {{ o.token|tojson }}, design: {{ view.design_json|safe }}, status: {{ view.status|tojson }}, paidFlag: {{ (request.args.get('paid') or '')|tojson }} };</script>
+<script src="{{ url_for('static', filename='cake.js') }}?v={{ asset_v }}"></script>
+<script src="{{ url_for('static', filename='order.js') }}?v={{ asset_v }}"></script>
+{% endblock %}

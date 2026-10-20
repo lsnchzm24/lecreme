@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block topclass %}on-dark{% endblock %}
+{% block bodyclass %}page-home{% endblock %}
+{% block main %}
+<section class="hero">
+  <div class="hero-copy">
+    <h1>Design the cake. Watch it come together. Pick it up fresh.</h1>
+    <p class="hero-lede">Choose every layer, filling and finish and see your cake take shape as you go. Then pick a pickup time and reserve it with a deposit, all in a couple of minutes.</p>
+    <div class="hero-actions">
+      <a class="btn btn-gilt" href="{{ url_for('build') }}">Design your cake</a>
+      <a class="btn btn-ghost-light" href="#signatures">Start from a signature</a>
+    </div>
+    {% if next_label %}
+    <p class="hero-next"><span class="dot dot-open" aria-hidden="true"></span>Next pickup available {{ next_label }}</p>
+    {% endif %}
+  </div>
+  <figure class="hero-stage">
+    <svg id="hero-cake" class="cake-svg" role="img" aria-label="A cake being built layer by layer"></svg>
+    <figcaption id="hero-caption" aria-live="polite">Vanilla bean sponge</figcaption>
+  </figure>
+</section>
+
+<section class="how" id="how" aria-labelledby="how-h">
+  <h2 id="how-h" class="section-h">How ordering works</h2>
+  <ol class="how-steps">
+    <li><h3>Design it</h3><p>Pick the size, sponge, filling, finish and decorations. The cake on screen changes with every tap.</p></li>
+    <li><h3>Choose a pickup time</h3><p>The calendar shows real openings in our kitchen, based on how much work your design takes.</p></li>
+    <li><h3>Reserve with a deposit</h3><p>Pay half today to lock the date. The balance is due at pickup, online or in person.</p></li>
+    <li><h3>Follow along</h3><p>Your order page shows when it's baking, being decorated and ready.</p></li>
+    <li><h3>Pick it up</h3><p>Boxed, chilled and exactly what you designed.</p></li>
+  </ol>
+</section>
+
+<section class="sigs" id="signatures" aria-labelledby="sig-h">
+  <div class="sigs-head">
+    <h2 id="sig-h" class="section-h">Start from a signature</h2>
+    <p>Open any of these in the designer and make it yours: swap the flavor, change the color, add a message.</p>
+  </div>
+  <div class="sig-grid">
+    {% for s in signatures %}
+    <a class="sig" href="{{ url_for('build', sig=s.id) }}">
+      <div class="sig-art"><svg class="cake-svg sig-svg" data-design='{{ s.design|tojson }}' aria-hidden="true"></svg></div>
+      <div class="sig-body">
+        <h3>{{ s.name }}</h3>
+        <p>{{ s.blurb }}</p>
+        <p class="sig-meta"><span>{{ money(s.price) }}</span><span>Serves {{ s.servings }}</span></p>
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="avail" id="availability" aria-labelledby="av-h">
+  <div class="avail-head">
+    <h2 id="av-h" class="section-h">The next two weeks</h2>
+    <p>Openings for a one-tier cake. Larger designs need a little more notice, and the designer checks your exact cake.</p>
+  </div>
+  <ul class="week">
+    {% for d in week %}{% set p = d.date|dparts %}
+    <li class="day day-{{ d.status }}">
+      <span class="day-dow">{{ p.dow }}</span>
+      <span class="day-num">{{ p.day }}</span>
+      <span class="day-state">{% if d.status == 'open' %}Open{% elif d.status == 'limited' %}Few spots{% elif d.status == 'full' %}Booked{% elif d.status == 'soon' %}Too soon{% else %}Closed{% endif %}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  <a class="btn btn-wine" href="{{ url_for('build') }}">Design your cake</a>
+</section>
+
+<section class="call">
+  <p class="call-script">Something we didn't think of?</p>
+  <p class="call-text">Call or text and we'll make it happen.</p>
+  <a class="call-phone" href="tel:{{ brand.phone_href }}">{{ brand.phone }}</a>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>window.LC_MENU = {{ menu_json|safe }};</script>
+<script src="{{ url_for('static', filename='cake.js') }}?v={{ asset_v }}"></script>
+<script src="{{ url_for('static', filename='home.js') }}?v={{ asset_v }}"></script>
+{% endblock %}
