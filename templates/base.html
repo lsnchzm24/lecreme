@@ -11,9 +11,7 @@
   <meta property="og:title" content="{{ brand.name }}">
   <meta property="og:description" content="Design your cake, see it before it's baked, pick it up fresh.">
   <meta property="og:image" content="{{ url_for('static', filename='img/og.png', _external=True) }}">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..800;1,6..96,400..700&family=Instrument+Sans:wght@400..700&family=Pinyon+Script&display=swap" rel="stylesheet">
+  <link rel="preload" href="{{ url_for('static', filename='fonts/bricolage.woff2') }}" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v={{ asset_v }}">
   {% block head %}{% endblock %}
 </head>
