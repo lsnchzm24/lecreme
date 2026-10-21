@@ -35,6 +35,14 @@ app.secret_key = os.environ.get("SECRET_KEY") or os.environ.get("ADMIN_PASSWORD"
 app.config.update(MAX_CONTENT_LENGTH=12 * 1024 * 1024, SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax",
                   SESSION_COOKIE_SECURE=os.environ.get("RAILWAY_ENVIRONMENT") is not None, TEMPLATES_AUTO_RELOAD=True)
 
+@app.before_request
+def force_https():
+    """On Railway, send http:// visitors to the secure address (the browser's padlock)."""
+    if (os.environ.get("RAILWAY_ENVIRONMENT") and request.scheme == "http" and request.path != "/healthz"
+            and not request.host.startswith(("localhost", "127.0.0.1")) and "." in request.host):
+        return redirect(request.url.replace("http://", "https://", 1), code=301)
+
+
 BRAND = {
     "name": os.environ.get("BUSINESS_NAME", "LeCreme Bakery"),
     "phone": os.environ.get("BAKERY_PHONE", "786-484-6746"),
