@@ -96,8 +96,31 @@ def application_fee(cents):
     return min(platform_cut(cents) + stripe_fee_estimate(cents), cents)
 
 
+def key_mode():
+    return "live" if "_live_" in _key() else "test"
+
+
 def connect_account():
-    return os.environ.get("STRIPE_CONNECT_ACCOUNT", "").strip() or store.setting("connect_account")
+    """The bakery's connected account for the current key's mode (test and live accounts never mix)."""
+    env = os.environ.get("STRIPE_CONNECT_ACCOUNT", "").strip()
+    if env:
+        return env
+    acct = store.setting("connect_account")
+    mode = store.setting("connect_mode")
+    if acct and mode and mode != key_mode():
+        return ""                     # saved account belongs to the other mode
+    return acct
+
+
+def forget_connect():
+    for k in ("connect_account", "connect_mode", "connect_branded"):
+        store.set_setting(k, "")
+    store.set_setting("connect_ready", "0")
+
+
+def _no_access(err):
+    e = (err or "").lower()
+    return "does not have access" in e or "no such account" in e or "not_found" in e or "does not exist" in e
 
 
 def connect_ready():
@@ -496,6 +519,8 @@ def start_onboarding(base_url):
             return None, err
         acct = made["id"]
         store.set_setting("connect_account", acct)
+        store.set_setting("connect_mode", key_mode())
+        store.set_setting("connect_ready", "0")
         store.set_setting("connect_branded", acct if icon else "")
     onboarding = {"return_url": f"{base_url}/admin/stripe/return", "refresh_url": f"{base_url}/admin/stripe/connect",
                   "configurations": ["merchant", "recipient"]}
@@ -505,6 +530,9 @@ def start_onboarding(base_url):
         onboarding.pop("configurations")
         link, err = _v2("POST", "/v2/core/account_links", {"account": acct, "use_case": {"type": "account_onboarding",
                                                                                        "account_onboarding": onboarding}})
+    if err and _no_access(err) and not os.environ.get("STRIPE_CONNECT_ACCOUNT"):
+        forget_connect()                                   # stale account from another mode: start fresh
+        return start_onboarding(base_url)
     if err:
         return None, err
     return link["url"], ""
@@ -532,9 +560,14 @@ def refresh_connect():
     if not acct or not enabled():
         return st
     body, err = _stripe("GET", f"/accounts/{acct}")
+    if err and _no_access(err) and not os.environ.get("STRIPE_CONNECT_ACCOUNT"):
+        forget_connect()                                   # account from another mode or removed: not connected
+        return {"account": "", "charges": False, "payouts": False, "details": False, "error": ""}
     if err:
         st["error"] = err
         return st
+    if not store.setting("connect_mode"):
+        store.set_setting("connect_mode", key_mode())
     st.update(charges=bool(body.get("charges_enabled")), payouts=bool(body.get("payouts_enabled")),
               details=bool(body.get("details_submitted")))
     store.set_setting("connect_ready", "1" if st["charges"] else "0")
