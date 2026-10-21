@@ -492,8 +492,12 @@ def start_onboarding(base_url):
         icon = _upload_icon()
         if icon:
             branding["icon"] = icon
+        email = (store.setting("connect_email") or "").strip()
+        if not email:
+            return None, _("Enter the bakery owner's email first.")
         body = {
             "display_name": BUSINESS,
+            "contact_email": email,
             "dashboard": "express",
             "identity": {"country": "us"},
             "configuration": {

@@ -273,8 +273,22 @@ def pay_report():
     return jsonify({**r, "connect": st, "stripe_on": payments.enabled(), "test_mode": payments.test_mode()})
 
 
-@bp.get("/stripe/connect")
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+@bp.route("/stripe/connect", methods=["GET", "POST"])
 def stripe_connect():
+    """Stripe needs a contact email for the bakery's new account, so ask for it once before starting."""
+    error = ""
+    if request.method == "POST":
+        email = (request.form.get("email") or "").strip()[:200]
+        if EMAIL_RE.match(email):
+            store.set_setting("connect_email", email)
+        else:
+            error = _("Enter a valid email address.")
+    if not payments.connect_account() and (error or not store.setting("connect_email")):
+        return render_template("admin_connect.html", error=error,
+                               email=request.form.get("email") or os.environ.get("ORDERS_INBOX", ""))
     url, err = payments.start_onboarding(_ctx["base_url"]())
     if err:
         return render_template("admin_msg.html", title=_("Stripe couldn't start"), message=err), 502

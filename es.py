@@ -554,4 +554,8 @@ ES = {
     "Stripe card fees": "Comisiones de tarjeta de Stripe",
     "Stripe fee": "Comisión de Stripe",
     "Platform ({pct}%)": "Plataforma ({pct}%)",
+    "Enter a valid email address.": "Escribe un correo válido.",
+    "Enter the bakery owner's email first.": "Primero escribe el correo de la dueña o dueño de la pastelería.",
+    "Enter the bakery owner's email. Stripe uses it for the bakery's account and sends payout notices there.": "Escribe el correo de la dueña o dueño de la pastelería. Stripe lo usa para la cuenta de la pastelería y envía ahí los avisos de pagos.",
+    "Continue to Stripe": "Continuar a Stripe",
 }
