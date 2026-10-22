@@ -861,8 +861,8 @@ function numberTopper(t, ty, num, T, Mt, track) {
 // -------------------------------------------------------------------- viewer
 function easeOutBack(x) { const c1 = 1.5, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); }
 
-function frame(camera, root, topY, w, h, fitR) {
-  const box = new THREE.Box3().setFromObject(root);
+function frame(camera, root, topY, w, h, fitR, knownBox) {
+  const box = knownBox || new THREE.Box3().setFromObject(root);
   const size = box.getSize(new THREE.Vector3()), center = box.getCenter(new THREE.Vector3());
   const radius = Math.max(size.x, size.z) / 2, height = size.y;
   const aspect = w / h, vfov = camera.fov * Math.PI / 180, hfov = 2 * Math.atan(Math.tan(vfov / 2) * aspect);
@@ -871,6 +871,8 @@ function frame(camera, root, topY, w, h, fitR) {
   return { dist: need + radius * .5, target: new THREE.Vector3(0, center.y - height * .04, 0), elev };
   void topY;
 }
+
+function shapeChanged(last, d) { return last != null && last.split("|")[0] !== d.shape; }
 
 class Viewer {
   constructor(container, menu, opts) {
@@ -932,6 +934,12 @@ class Viewer {
       this.anim.push({ t0: performance.now(), dur: 380, step: k => track.frost.forEach(m => m.color.lerpColors(prevFrost, m.userData.to, k)) });
     }
     this.frostNow = target;
+    // frame the camera on the finished cake, before new pieces shrink down to grow in
+    built.root.rotation.y = this.yaw;
+    built.root.updateMatrixWorld(true);
+    this.box = new THREE.Box3().setFromObject(built.root);   // full size, measured once per design
+    this.fit(!prevKeys || shapeChanged(this.lastShape, d));
+    this.lastShape = d.shape + "|" + d.tiers + "|" + d.size;
     // new pieces settle in
     if (prevKeys && !REDUCED) {
       let delay = 0;
@@ -945,11 +953,10 @@ class Viewer {
     }
     if (opts.view === "inside" && this.lastView !== "inside") this.yawTarget = -CUT_AT + .35;
     this.lastView = opts.view;
-    this.fit(!prevKeys);
     this.dirty = true;
   }
   fit(snap) {
-    const f = frame(this.camera, this.cur.root, this.cur.top, this.w, this.h, this.opts.fit);
+    const f = frame(this.camera, this.cur.root, this.cur.top, this.w, this.h, this.opts.fit, this.box);
     this.goal = f;
     if (snap || this.camDist == null) { this.camDist = f.dist; this.camTarget.copy(f.target); }
   }
